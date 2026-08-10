@@ -29,7 +29,7 @@ export default function AdminPortal() {
     { id: 'order-management', label: 'Order Management', icon: 'receipt_long' },
     { id: 'ticket-management', label: 'Ticket Management', icon: 'confirmation_number', badge: '146' },
     { id: 'system-settings', label: 'System Settings', icon: 'settings' },
-    { id: 'provider-management', label: 'Provider Management', icon: 'dry_cleaning', badge: '2 pending' },
+    { id: 'cleaners-management', label: 'cleaners Management', icon: 'dry_cleaning', badge: '2 pending' },
     { id: 'payment-records', label: 'Payment Records', icon: 'payments' },
     { id: 'user-logs', label: 'User Logs', icon: 'history_edu' },
   ];
@@ -46,9 +46,8 @@ export default function AdminPortal() {
 
       {/* Persistent Sidebar */}
       <aside
-        className={`fixed left-0 top-0 h-full w-[280px] bg-surface-container-lowest z-50 flex flex-col shadow-[0_1px_8px_rgba(0,0,0,0.04)] border-r border-surface-container transition-transform duration-300 ${
-          isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        }`}
+        className={`fixed left-0 top-0 h-full w-[280px] bg-surface-container-lowest z-50 flex flex-col shadow-[0_1px_8px_rgba(0,0,0,0.04)] border-r border-surface-container transition-transform duration-300 ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+          }`}
       >
         {/* Brand Header */}
         <div className="h-16 px-gutter-desktop flex items-center justify-between border-b border-surface-container">
@@ -80,11 +79,10 @@ export default function AdminPortal() {
               <button
                 key={item.id}
                 onClick={() => handleTabChange(item.id)}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 text-left font-label-md cursor-pointer ${
-                  isActive
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 text-left font-label-md cursor-pointer ${isActive
                     ? 'bg-primary text-on-primary shadow-lg'
                     : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
@@ -92,9 +90,8 @@ export default function AdminPortal() {
                 </div>
                 {item.badge && (
                   <span
-                    className={`px-2 py-0.5 text-xs rounded-full font-semibold ${
-                      isActive ? 'bg-on-primary/20 text-on-primary' : 'bg-amber-100 text-amber-800'
-                    }`}
+                    className={`px-2 py-0.5 text-xs rounded-full font-semibold ${isActive ? 'bg-on-primary/20 text-on-primary' : 'bg-amber-100 text-amber-800'
+                      }`}
                   >
                     {item.badge}
                   </span>
@@ -137,7 +134,7 @@ export default function AdminPortal() {
               </span>
               <input
                 className="w-full bg-surface-container rounded-full py-2 pl-10 pr-4 font-body-sm text-on-surface outline-none border border-transparent focus:border-primary focus:bg-surface-container-lowest transition-all"
-                placeholder="Search orders, providers, or users..."
+                placeholder="Search orders, cleanerss, or users..."
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -147,7 +144,7 @@ export default function AdminPortal() {
 
           <div className="flex items-center gap-stack-gap-md">
             <button
-              onClick={() => alert('System Notifications: 2 new provider registration applications pending approval.')}
+              onClick={() => alert('System Notifications: 2 new cleaners registration applications pending approval.')}
               className="relative p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors cursor-pointer"
             >
               <span className="material-symbols-outlined">notifications</span>
@@ -173,6 +170,7 @@ export default function AdminPortal() {
         <main className="w-full bg-background min-h-[calc(100vh-64px)]">
           <div className="max-w-container-max mx-auto px-gutter-desktop py-stack-gap-lg">
             {activeTab === 'overview' && <AdminOverview onNavigateTab={handleTabChange} />}
+            {activeTab === 'cleaners-management' && <AdminProviderManagement />}
             {activeTab === 'provider-management' && <AdminProviderManagement />}
             {activeTab === 'order-management' && <AdminOrderManagement />}
             {activeTab === 'ticket-management' && <AdminTicketManagement />}

@@ -1,134 +1,124 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-export default function AdminProviderManagement() {
+export default function AdmincleanersManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilterTab, setActiveFilterTab] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // New Provider Form State
+  // New cleaners Form State
   const [newBusinessName, setNewBusinessName] = useState('');
   const [newLocation, setNewLocation] = useState('');
   const [newOwner, setNewOwner] = useState('');
 
-  const [providers, setProviders] = useState([
-    {
-      id: 'PRV-001',
-      name: 'Nairobi Fresh Wash',
-      owner: 'John Mwangi',
-      location: 'Westlands',
-      subLocation: 'Nairobi, KE',
-      status: 'Active',
-      rating: 4.8,
-      reviewsCount: 120,
-      totalOrders: '1,452',
-      ordersTrend: '+24 this week',
-      image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAW9HWNVzvzvt4407vKEqCKZz-vGckNfwWZX0zO1gK0KH0FrXntEQG1R2S1xJBqQNyStYwJi9Yhbqva7iFsaX8n22wGXDYZTWmTw8jyAjmsZU6_qVmPRyREExyhQhwl6UhAe6ikYOp4evYrJuwrrId5KRNfy3wzV4_ax99hgBK7VYe6jlUO7cGf_pU3zI1nRbU7SioWlfLql0ehdI8HGGzprBChmXkh7coXMwFLOixdzsYf6J_tDqLAmQ',
-    },
-    {
-      id: 'PRV-002',
-      name: 'Crystal Clear Cleaners',
-      owner: 'Sarah Wanjiku',
-      location: 'Kilimani',
-      subLocation: 'Nairobi, KE',
-      status: 'Pending',
-      rating: null,
-      reviewsCount: null,
-      totalOrders: '--',
-      ordersTrend: 'Applied 2 days ago',
-      image: null,
-    },
-    {
-      id: 'PRV-003',
-      name: 'Lavington Laundry Lounge',
-      owner: 'David Omondi',
-      location: 'Lavington',
-      subLocation: 'Nairobi, KE',
-      status: 'Active',
-      rating: 4.5,
-      reviewsCount: 89,
-      totalOrders: '892',
-      ordersTrend: '+5 this week',
-      image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuARDfCQuh5kukhGqLiXAuvb2xNhj2G8mgvWNf7h44Dfkix3zjzIkb7nBLtRGfuaRqZll2G09iJstrsaBuqQ99mo4cj3iz5Q05abUzDIG-X1msoJhAawmt3ceHADvtDpO94QT4JB1U2IK_dAIXrtbV4Uizd4EthrCbhexR6efFMybyrO_WCAwHEhgE-eWJKEUqz8IjxWcxQPdWZrFngdjniWed8_sZFqJXIjK3vCJc7EEwT-MbPHtG2F9Q',
-    },
-    {
-      id: 'PRV-004',
-      name: 'QuickPress CBD',
-      owner: 'Grace Njeri',
-      location: 'CBD',
-      subLocation: 'Nairobi, KE',
-      status: 'Suspended',
-      rating: 3.9,
-      reviewsCount: 45,
-      totalOrders: '3,201',
-      ordersTrend: 'Policy Violation',
-      image: null,
-    },
-  ]);
+  const [cleanerss, setcleanerss] = useState([]);
 
-  const handleApprove = (id) => {
-    setProviders(prev => prev.map(p => p.id === id ? { ...p, status: 'Active', totalOrders: '0', ordersTrend: 'Just approved' } : p));
-  };
-
-  const handleReject = (id) => {
-    if (window.confirm('Are you sure you want to reject this provider application?')) {
-      setProviders(prev => prev.filter(p => p.id !== id));
+  // Fetch cleaners/providers from MongoDB
+  const fetchProviders = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('http://localhost:5000/api/auth/providers');
+      const json = await res.json();
+      if (json.success && json.data) {
+        const formatted = json.data.map((p) => ({
+          id: p._id,
+          name: p.fullName || 'Sparkle Cleaners Ltd',
+          owner: p.fullName,
+          location: p.addresses?.[0]?.street || 'Nairobi',
+          subLocation: p.addresses?.[0]?.city || 'Nairobi, KE',
+          status: p.status || 'Active',
+          rating: p.rating || 4.8,
+          reviewsCount: p.reviewsCount || 15,
+          totalOrders: '0',
+          ordersTrend: 'Active on platform',
+          image: null,
+        }));
+        setcleanerss(formatted);
+      }
+    } catch (err) {
+      console.error('Failed to fetch providers from MongoDB:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleSuspend = (id) => {
-    setProviders(prev => prev.map(p => p.id === id ? { ...p, status: 'Suspended', ordersTrend: 'Under review' } : p));
+  useEffect(() => {
+    fetchProviders();
+  }, []);
+
+  const handleUpdateStatus = async (id, status) => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/auth/providers/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      const json = await res.json();
+      if (json.success) {
+        fetchProviders();
+      }
+    } catch (err) {
+      console.error('Failed to update provider status:', err);
+    }
   };
 
-  const handleRestore = (id) => {
-    setProviders(prev => prev.map(p => p.id === id ? { ...p, status: 'Active', ordersTrend: 'Restored' } : p));
-  };
+  const handleApprove = (id) => handleUpdateStatus(id, 'Active');
+  const handleReject = (id) => handleUpdateStatus(id, 'Rejected');
+  const handleSuspend = (id) => handleUpdateStatus(id, 'Suspended');
+  const handleRestore = (id) => handleUpdateStatus(id, 'Active');
 
-  const handleAddProviderSubmit = (e) => {
+  const handleAddcleanersSubmit = async (e) => {
     e.preventDefault();
     if (!newBusinessName || !newLocation) return;
-    const newProv = {
-      id: `PRV-00${providers.length + 1}`,
-      name: newBusinessName,
-      owner: newOwner || 'New Provider',
-      location: newLocation,
-      subLocation: 'Nairobi, KE',
-      status: 'Active',
-      rating: 5.0,
-      reviewsCount: 1,
-      totalOrders: '0',
-      ordersTrend: 'New provider',
-      image: null,
-    };
-    setProviders([newProv, ...providers]);
+
+    try {
+      const res = await fetch('http://localhost:5000/api/auth/providers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newBusinessName,
+          owner: newOwner,
+          location: newLocation
+        })
+      });
+      const json = await res.json();
+      if (json.success) {
+        fetchProviders();
+      }
+    } catch (err) {
+      console.error('Error creating provider in MongoDB:', err);
+    }
+
     setNewBusinessName('');
     setNewLocation('');
     setNewOwner('');
     setIsAddModalOpen(false);
   };
 
-  // Filtered providers calculation
-  const filteredProviders = providers.filter(p => {
+
+  // Filtered cleanerss calculation
+  const filteredcleanerss = cleanerss.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          p.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (p.owner && p.owner.toLowerCase().includes(searchTerm.toLowerCase()));
+      p.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.owner && p.owner.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesStatus = activeFilterTab === 'All' || p.status === activeFilterTab;
     return matchesSearch && matchesStatus;
   });
 
-  const totalCount = providers.length;
-  const activeCount = providers.filter(p => p.status === 'Active').length;
-  const pendingCount = providers.filter(p => p.status === 'Pending').length;
-  const suspendedCount = providers.filter(p => p.status === 'Suspended').length;
+  const totalCount = cleanerss.length;
+  const activeCount = cleanerss.filter(p => p.status === 'Active').length;
+  const pendingCount = cleanerss.filter(p => p.status === 'Pending').length;
+  const suspendedCount = cleanerss.filter(p => p.status === 'Suspended').length;
 
   return (
     <div className="flex flex-col gap-stack-gap-lg">
       {/* Header Section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-stack-gap-md bg-surface-container-lowest p-stack-gap-lg rounded-xl shadow-xs border border-surface-container/40">
         <div className="flex flex-col">
-          <h1 className="font-headline-lg text-on-surface m-0">Provider Management</h1>
+          <h1 className="font-headline-lg text-on-surface m-0">cleaners Management</h1>
           <p className="font-body-md text-on-surface-variant m-0 mt-1">
-            Manage and monitor all laundry service providers across the platform.
+            Manage and monitor all laundry service cleanerss across the platform.
           </p>
         </div>
         <button
@@ -138,18 +128,18 @@ export default function AdminProviderManagement() {
           <span className="material-symbols-outlined text-[20px] transition-transform group-hover:scale-110">
             add_business
           </span>
-          Add New Provider
+          Add New cleaners
         </button>
       </div>
 
       {/* Analytics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-stack-gap-md">
-        {/* Total Providers */}
+        {/* Total cleanerss */}
         <div className="bg-surface-container-lowest p-stack-gap-lg rounded-xl shadow-xs border border-surface-container/40 relative overflow-hidden group">
           <div className="absolute -right-4 -top-4 w-24 h-24 bg-primary/5 rounded-full group-hover:scale-150 transition-transform duration-500 pointer-events-none" />
           <div className="flex justify-between items-start mb-4">
             <div className="flex flex-col">
-              <span className="font-label-sm text-on-surface-variant uppercase tracking-wider mb-1">Total Providers</span>
+              <span className="font-label-sm text-on-surface-variant uppercase tracking-wider mb-1">Total cleanerss</span>
               <span className="font-headline-xl text-on-surface">1,248</span>
             </div>
             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
@@ -163,7 +153,7 @@ export default function AdminProviderManagement() {
         </div>
 
         {/* Pending Approval */}
-        <div 
+        <div
           onClick={() => setActiveFilterTab('Pending')}
           className="bg-surface-container-lowest p-stack-gap-lg rounded-xl shadow-xs border border-surface-container/40 relative overflow-hidden group cursor-pointer hover:border-amber-400 transition-colors"
         >
@@ -184,7 +174,7 @@ export default function AdminProviderManagement() {
         </div>
 
         {/* Suspended */}
-        <div 
+        <div
           onClick={() => setActiveFilterTab('Suspended')}
           className="bg-surface-container-lowest p-stack-gap-lg rounded-xl shadow-xs border border-surface-container/40 relative overflow-hidden group cursor-pointer hover:border-rose-400 transition-colors"
         >
@@ -225,41 +215,37 @@ export default function AdminProviderManagement() {
           <div className="flex gap-2 w-full lg:w-auto overflow-x-auto pb-2 lg:pb-0 scrollbar-hide">
             <button
               onClick={() => setActiveFilterTab('All')}
-              className={`font-label-sm px-4 py-2 rounded-full whitespace-nowrap transition-colors cursor-pointer ${
-                activeFilterTab === 'All'
-                  ? 'bg-primary/10 text-primary font-semibold'
-                  : 'bg-transparent text-on-surface-variant hover:bg-surface-container border border-outline-variant'
-              }`}
+              className={`font-label-sm px-4 py-2 rounded-full whitespace-nowrap transition-colors cursor-pointer ${activeFilterTab === 'All'
+                ? 'bg-primary/10 text-primary font-semibold'
+                : 'bg-transparent text-on-surface-variant hover:bg-surface-container border border-outline-variant'
+                }`}
             >
-              All Providers
+              All cleanerss
             </button>
             <button
               onClick={() => setActiveFilterTab('Active')}
-              className={`font-label-sm px-4 py-2 rounded-full whitespace-nowrap transition-colors cursor-pointer ${
-                activeFilterTab === 'Active'
-                  ? 'bg-primary/10 text-primary font-semibold'
-                  : 'bg-transparent text-on-surface-variant hover:bg-surface-container border border-outline-variant'
-              }`}
+              className={`font-label-sm px-4 py-2 rounded-full whitespace-nowrap transition-colors cursor-pointer ${activeFilterTab === 'Active'
+                ? 'bg-primary/10 text-primary font-semibold'
+                : 'bg-transparent text-on-surface-variant hover:bg-surface-container border border-outline-variant'
+                }`}
             >
               Active ({activeCount})
             </button>
             <button
               onClick={() => setActiveFilterTab('Pending')}
-              className={`font-label-sm px-4 py-2 rounded-full whitespace-nowrap transition-colors cursor-pointer ${
-                activeFilterTab === 'Pending'
-                  ? 'bg-amber-100 text-amber-900 font-semibold'
-                  : 'bg-transparent text-on-surface-variant hover:bg-surface-container border border-outline-variant'
-              }`}
+              className={`font-label-sm px-4 py-2 rounded-full whitespace-nowrap transition-colors cursor-pointer ${activeFilterTab === 'Pending'
+                ? 'bg-amber-100 text-amber-900 font-semibold'
+                : 'bg-transparent text-on-surface-variant hover:bg-surface-container border border-outline-variant'
+                }`}
             >
               Pending ({pendingCount})
             </button>
             <button
               onClick={() => setActiveFilterTab('Suspended')}
-              className={`font-label-sm px-4 py-2 rounded-full whitespace-nowrap transition-colors cursor-pointer ${
-                activeFilterTab === 'Suspended'
-                  ? 'bg-rose-100 text-rose-900 font-semibold'
-                  : 'bg-transparent text-on-surface-variant hover:bg-surface-container border border-outline-variant'
-              }`}
+              className={`font-label-sm px-4 py-2 rounded-full whitespace-nowrap transition-colors cursor-pointer ${activeFilterTab === 'Suspended'
+                ? 'bg-rose-100 text-rose-900 font-semibold'
+                : 'bg-transparent text-on-surface-variant hover:bg-surface-container border border-outline-variant'
+                }`}
             >
               Suspended ({suspendedCount})
             </button>
@@ -289,7 +275,7 @@ export default function AdminProviderManagement() {
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-variant bg-surface-container-lowest">
-              {filteredProviders.map((p) => {
+              {filteredcleanerss.map((p) => {
                 if (p.status === 'Pending') {
                   return (
                     <tr key={p.id} className="hover:bg-surface-container-low transition-colors group">
@@ -427,7 +413,7 @@ export default function AdminProviderManagement() {
                           <span className="material-symbols-outlined text-[18px]">block</span>
                         </button>
                         <button
-                          onClick={() => alert(`Editing provider details for ${p.name}`)}
+                          onClick={() => alert(`Editing cleaners details for ${p.name}`)}
                           className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:bg-surface-variant hover:text-primary transition-colors cursor-pointer"
                           title="Edit"
                         >
@@ -446,8 +432,8 @@ export default function AdminProviderManagement() {
         <div className="p-stack-gap-md border-t border-surface-variant flex items-center justify-between bg-surface-container-lowest">
           <div className="font-body-sm text-on-surface-variant">
             Showing <span className="font-semibold text-on-surface">1</span> to{' '}
-            <span className="font-semibold text-on-surface">{filteredProviders.length}</span> of{' '}
-            <span className="font-semibold text-on-surface">1,248</span> providers
+            <span className="font-semibold text-on-surface">{filteredcleanerss.length}</span> of{' '}
+            <span className="font-semibold text-on-surface">1,248</span> cleanerss
           </div>
           <div className="flex gap-1">
             <button
@@ -477,12 +463,12 @@ export default function AdminProviderManagement() {
         </div>
       </div>
 
-      {/* Add New Provider Modal */}
+      {/* Add New cleaners Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-surface-container-lowest rounded-2xl shadow-xl max-w-md w-full p-6 border border-surface-container/60 space-y-4">
             <div className="flex justify-between items-center border-b border-surface-container/40 pb-3">
-              <h3 className="font-headline-md text-on-surface">Add New Laundry Provider</h3>
+              <h3 className="font-headline-md text-on-surface">Add New Laundry cleaners</h3>
               <button
                 onClick={() => setIsAddModalOpen(false)}
                 className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container"
@@ -490,7 +476,7 @@ export default function AdminProviderManagement() {
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            <form onSubmit={handleAddProviderSubmit} className="space-y-4">
+            <form onSubmit={handleAddcleanersSubmit} className="space-y-4">
               <div>
                 <label className="block font-label-sm text-on-surface mb-1">Business Name</label>
                 <input
@@ -535,7 +521,7 @@ export default function AdminProviderManagement() {
                   type="submit"
                   className="px-5 py-2 rounded-lg font-label-md bg-primary text-on-primary hover:bg-primary-container shadow-xs"
                 >
-                  Register Provider
+                  Register cleaners
                 </button>
               </div>
             </form>

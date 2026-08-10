@@ -16,7 +16,7 @@ export default function AdminUserLogs() {
       role: 'Admin',
       initials: 'JS',
       avatarBg: 'bg-primary-container text-on-primary-container',
-      action: 'Provider Approved',
+      action: 'cleaners Approved',
       details: "Approved 'Sparkle Cleaners' onboarding request.",
       ip: '192.168.1.104',
       status: 'Success',
@@ -130,25 +130,22 @@ export default function AdminUserLogs() {
           <span className="font-label-sm text-on-surface-variant">Filter Status:</span>
           <button
             onClick={() => setStatusFilter('All')}
-            className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer ${
-              statusFilter === 'All' ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface'
-            }`}
+            className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer ${statusFilter === 'All' ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface'
+              }`}
           >
             All
           </button>
           <button
             onClick={() => setStatusFilter('Success')}
-            className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer ${
-              statusFilter === 'Success' ? 'bg-emerald-600 text-white' : 'bg-surface-container text-on-surface'
-            }`}
+            className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer ${statusFilter === 'Success' ? 'bg-emerald-600 text-white' : 'bg-surface-container text-on-surface'
+              }`}
           >
             Success Only
           </button>
           <button
             onClick={() => setStatusFilter('Failed')}
-            className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer ${
-              statusFilter === 'Failed' ? 'bg-rose-600 text-white' : 'bg-surface-container text-on-surface'
-            }`}
+            className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer ${statusFilter === 'Failed' ? 'bg-rose-600 text-white' : 'bg-surface-container text-on-surface'
+              }`}
           >
             Failed Only
           </button>
@@ -172,7 +169,7 @@ export default function AdminUserLogs() {
         </div>
 
         {/* Failed Login Attempts */}
-        <div 
+        <div
           onClick={() => setStatusFilter(statusFilter === 'Failed' ? 'All' : 'Failed')}
           className="bg-surface-container-lowest p-6 rounded-xl shadow-xs border border-surface-container/40 flex flex-col gap-2 relative overflow-hidden group cursor-pointer hover:border-rose-400 transition-colors"
         >
@@ -241,31 +238,28 @@ export default function AdminUserLogs() {
             <div className="flex items-center bg-surface-container rounded-lg p-1">
               <button
                 onClick={() => setTimeRange('Today')}
-                className={`px-3 py-1.5 rounded-md font-label-sm transition-colors cursor-pointer ${
-                  timeRange === 'Today'
+                className={`px-3 py-1.5 rounded-md font-label-sm transition-colors cursor-pointer ${timeRange === 'Today'
                     ? 'bg-surface-container-lowest shadow-xs text-on-surface'
                     : 'hover:bg-surface-container-high text-on-surface-variant'
-                }`}
+                  }`}
               >
                 Today
               </button>
               <button
                 onClick={() => setTimeRange('7d')}
-                className={`px-3 py-1.5 rounded-md font-label-sm transition-colors cursor-pointer ${
-                  timeRange === '7d'
+                className={`px-3 py-1.5 rounded-md font-label-sm transition-colors cursor-pointer ${timeRange === '7d'
                     ? 'bg-surface-container-lowest shadow-xs text-on-surface'
                     : 'hover:bg-surface-container-high text-on-surface-variant'
-                }`}
+                  }`}
               >
                 7d
               </button>
               <button
                 onClick={() => setTimeRange('30d')}
-                className={`px-3 py-1.5 rounded-md font-label-sm transition-colors cursor-pointer ${
-                  timeRange === '30d'
+                className={`px-3 py-1.5 rounded-md font-label-sm transition-colors cursor-pointer ${timeRange === '30d'
                     ? 'bg-surface-container-lowest shadow-xs text-on-surface'
                     : 'hover:bg-surface-container-high text-on-surface-variant'
-                }`}
+                  }`}
               >
                 30d
               </button>
@@ -312,9 +306,8 @@ export default function AdminUserLogs() {
               {filteredLogs.map((log) => (
                 <tr
                   key={log.id}
-                  className={`hover:bg-surface-container-lowest/50 transition-colors group cursor-pointer ${
-                    log.isError ? 'bg-error-container/10' : ''
-                  }`}
+                  className={`hover:bg-surface-container-lowest/50 transition-colors group cursor-pointer ${log.isError ? 'bg-error-container/10' : ''
+                    }`}
                 >
                   <td className="p-4">
                     <div className="font-body-sm text-on-surface">{log.date}</div>

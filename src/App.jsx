@@ -2,6 +2,8 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/layout/Navbar';
 import HomePage from './pages/HomePage';
+import CheckoutPage from './pages/CheckoutPage';
+import PortalGateway from './pages/PortalGateway';
 import ProviderPortal from './pages/ProviderPortal';
 import AdminPortal from './pages/AdminPortal';
 import './App.css';
@@ -10,7 +12,7 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* Customer Facing Routes */}
+        {/* Customer Facing & Authentication Routes */}
         <Route
           path="/"
           element={
@@ -22,6 +24,9 @@ function App() {
             </div>
           }
         />
+        <Route path="/checkout" element={<CheckoutPage />} />
+        <Route path="/login" element={<PortalGateway />} />
+        <Route path="/portal" element={<PortalGateway />} />
 
         {/* Provider Portal Single Unified Page Route */}
         <Route path="/provider" element={<ProviderPortal />} />

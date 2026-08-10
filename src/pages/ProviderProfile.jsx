@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export default function ProviderProfile({ isStandalone = true }) {
+export default function cleanersProfile({ isStandalone = true }) {
   const [profile, setProfile] = useState({
     businessName: 'HydroClean Westlands',
     description: 'Premium dry cleaning and laundry services tailored for the busy professional. We use eco-friendly solvents and guarantee a 24-hour turnaround on most items.',

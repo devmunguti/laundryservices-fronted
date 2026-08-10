@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-export default function ProviderDashboard() {
+export default function cleanersDashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -11,17 +11,17 @@ export default function ProviderDashboard() {
   const [orderFilter, setOrderFilter] = useState('all');
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/provider/dashboard' },
-    { id: 'orders', label: 'Orders', icon: 'receipt_long', badge: '12', path: '/provider/dashboard' },
-    { id: 'services', label: 'Services', icon: 'local_laundry_service', path: '/provider/dashboard' },
-    { id: 'reviews', label: 'Reviews', icon: 'star_rate', path: '/provider/dashboard' },
-    { id: 'earnings', label: 'Earnings', icon: 'payments', path: '/provider/dashboard' },
-    { id: 'payment-channels', label: 'Payment Channels', icon: 'account_balance_wallet', path: '/provider/payment-channels' },
+    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/cleaners/dashboard' },
+    { id: 'orders', label: 'Orders', icon: 'receipt_long', badge: '12', path: '/cleaners/dashboard' },
+    { id: 'services', label: 'Services', icon: 'local_laundry_service', path: '/cleaners/dashboard' },
+    { id: 'reviews', label: 'Reviews', icon: 'star_rate', path: '/cleaners/dashboard' },
+    { id: 'earnings', label: 'Earnings', icon: 'payments', path: '/cleaners/dashboard' },
+    { id: 'payment-channels', label: 'Payment Channels', icon: 'account_balance_wallet', path: '/cleaners/payment-channels' },
   ];
 
   const secondaryNavItems = [
-    { id: 'profile', label: 'Profile', icon: 'person', path: '/provider/dashboard' },
-    { id: 'settings', label: 'Settings', icon: 'settings', path: '/provider/dashboard' },
+    { id: 'profile', label: 'Profile', icon: 'person', path: '/cleaners/dashboard' },
+    { id: 'settings', label: 'Settings', icon: 'settings', path: '/cleaners/dashboard' },
   ];
 
 
@@ -166,7 +166,7 @@ export default function ProviderDashboard() {
             <div className="flex items-center gap-3 pl-4 border-l border-[#c3c5d9]/40">
               <div className="text-right hidden sm:block">
                 <p className="font-['Geist'] font-medium text-sm text-[#1a1c1e]">Mama Safi Cleaning</p>
-                <p className="font-['Geist'] text-xs text-[#434656]">Provider Account</p>
+                <p className="font-['Geist'] text-xs text-[#434656]">cleaners Account</p>
               </div>
               <div className="w-10 h-10 rounded-full bg-[#003ec7] flex items-center justify-center shadow-sm">
                 <span className="material-symbols-outlined text-white text-[24px]">person</span>

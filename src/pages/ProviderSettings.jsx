@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export default function ProviderSettings({ isStandalone = true }) {
+export default function cleanersSettings({ isStandalone = true }) {
   const [activeTab, setActiveTab] = useState('account');
   const [savedNotification, setSavedNotification] = useState('');
 
@@ -79,18 +79,16 @@ export default function ProviderSettings({ isStandalone = true }) {
                   key={item.id}
                   type="button"
                   onClick={() => setActiveTab(item.id)}
-                  className={`group relative flex items-center gap-3 px-4 py-3 rounded-xl w-full text-left transition-colors whitespace-nowrap lg:whitespace-normal font-['Geist'] text-sm font-medium cursor-pointer ${
-                    isActive
+                  className={`group relative flex items-center gap-3 px-4 py-3 rounded-xl w-full text-left transition-colors whitespace-nowrap lg:whitespace-normal font-['Geist'] text-sm font-medium cursor-pointer ${isActive
                       ? 'bg-[#00c1fd] text-[#004b65]'
                       : 'text-[#434656] hover:bg-[#e8e8ea] hover:text-[#1a1c1e]'
-                  }`}
+                    }`}
                 >
                   <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
                   <span>{item.label}</span>
                   <span
-                    className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-[#003ec7] rounded-r-full lg:block hidden transition-opacity ${
-                      isActive ? 'opacity-100' : 'opacity-0'
-                    }`}
+                    className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-[#003ec7] rounded-r-full lg:block hidden transition-opacity ${isActive ? 'opacity-100' : 'opacity-0'
+                      }`}
                   ></span>
                 </button>
               );
@@ -204,7 +202,7 @@ export default function ProviderSettings({ isStandalone = true }) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => alert('Are you sure you want to deactivate your provider account?')}
+                  onClick={() => alert('Are you sure you want to deactivate your cleaners account?')}
                   className="bg-transparent border border-[#ba1a1a] text-[#ba1a1a] hover:bg-[#ba1a1a] hover:text-white font-['Geist'] text-sm font-semibold px-6 py-2.5 rounded-full transition-colors whitespace-nowrap cursor-pointer"
                 >
                   Deactivate

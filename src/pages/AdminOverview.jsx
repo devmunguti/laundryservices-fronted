@@ -82,8 +82,8 @@ export default function AdminOverview({ onNavigateTab }) {
         </div>
 
         {/* Metric 3 */}
-        <div 
-          onClick={() => onNavigateTab && onNavigateTab('provider-management')}
+        <div
+          onClick={() => onNavigateTab && onNavigateTab('cleaners-management')}
           className="bg-surface-container-lowest rounded-xl p-stack-gap-lg shadow-xs flex flex-col justify-between group hover:-translate-y-1 transition-transform duration-300 border border-surface-container/40 cursor-pointer"
         >
           <div className="flex justify-between items-start mb-4">
@@ -93,7 +93,7 @@ export default function AdminOverview({ onNavigateTab }) {
             <span className="bg-amber-100 text-amber-800 dark:bg-amber-950/40 py-1 px-2 rounded-md font-label-sm font-semibold">2 pending</span>
           </div>
           <div>
-            <p className="font-body-sm text-on-surface-variant uppercase tracking-wider mb-1">Total Providers</p>
+            <p className="font-body-sm text-on-surface-variant uppercase tracking-wider mb-1">Total cleanerss</p>
             <h2 className="font-headline-lg text-on-surface">86</h2>
           </div>
         </div>
@@ -200,7 +200,7 @@ export default function AdminOverview({ onNavigateTab }) {
         <div className="col-span-12 lg:col-span-4 bg-surface-container-lowest rounded-xl shadow-xs overflow-hidden flex flex-col border border-surface-container/40">
           <div className="p-stack-gap-lg bg-surface-container-low flex justify-between items-center border-b border-surface-container/30">
             <h3 className="font-headline-md text-on-surface">Recent Activity</h3>
-            <button 
+            <button
               onClick={() => onNavigateTab && onNavigateTab('user-logs')}
               className="text-primary hover:text-primary-container font-label-md transition-colors cursor-pointer"
             >
@@ -217,7 +217,7 @@ export default function AdminOverview({ onNavigateTab }) {
               </div>
               <div>
                 <p className="font-body-md text-on-surface">
-                  <span className="font-label-md font-semibold">New Provider Application</span> received from "FreshPress Kilimani".
+                  <span className="font-label-md font-semibold">New cleaners Application</span> received from "FreshPress Kilimani".
                 </p>
                 <p className="font-body-sm text-on-surface-variant mt-1">10 mins ago</p>
               </div>

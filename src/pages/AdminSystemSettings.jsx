@@ -14,7 +14,7 @@ export default function AdminSystemSettings() {
   const [minPayout, setMinPayout] = useState('5000');
 
   // Notification Prefs State
-  const [alertNewProvider, setAlertNewProvider] = useState(true);
+  const [alertNewcleaners, setAlertNewcleaners] = useState(true);
   const [alertHighValue, setAlertHighValue] = useState(true);
   const [alertSystemErrors, setAlertSystemErrors] = useState(false);
 
@@ -91,11 +91,10 @@ export default function AdminSystemSettings() {
               <button
                 key={item.id}
                 onClick={() => setActiveSubTab(item.id)}
-                className={`w-full text-left flex items-center gap-3 px-4 py-3 rounded-lg transition-colors font-label-md cursor-pointer ${
-                  isActive
+                className={`w-full text-left flex items-center gap-3 px-4 py-3 rounded-lg transition-colors font-label-md cursor-pointer ${isActive
                     ? 'text-primary bg-primary-fixed font-semibold'
                     : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-                }`}
+                  }`}
               >
                 <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
                 {item.label}
@@ -172,7 +171,7 @@ export default function AdminSystemSettings() {
                 <label className="flex flex-col gap-2">
                   <span className="font-label-sm text-on-surface-variant flex items-center justify-between">
                     Platform Commission Rate (%)
-                    <span className="material-symbols-outlined text-[16px] text-tertiary cursor-help" title="Percentage deducted from each completed order for provider payouts.">
+                    <span className="material-symbols-outlined text-[16px] text-tertiary cursor-help" title="Percentage deducted from each completed order for cleaners payouts.">
                       help
                     </span>
                   </span>
@@ -186,7 +185,7 @@ export default function AdminSystemSettings() {
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 font-body-md text-on-surface-variant">%</span>
                   </div>
                   <p className="font-body-sm text-on-surface-variant text-xs mt-1">
-                    Percentage deducted from each completed order for provider payouts.
+                    Percentage deducted from each completed order for cleaners payouts.
                   </p>
                 </label>
 
@@ -223,18 +222,16 @@ export default function AdminSystemSettings() {
               <div className="flex flex-col gap-4">
                 <div className="flex items-center justify-between p-4 bg-surface-container-low rounded-lg">
                   <div>
-                    <h3 className="font-label-md text-on-surface">New Provider Registrations</h3>
-                    <p className="font-body-sm text-on-surface-variant text-xs">Receive alerts when a new laundry provider signs up.</p>
+                    <h3 className="font-label-md text-on-surface">New cleaners Registrations</h3>
+                    <p className="font-body-sm text-on-surface-variant text-xs">Receive alerts when a new laundry cleaners signs up.</p>
                   </div>
                   <button
-                    onClick={() => setAlertNewProvider(!alertNewProvider)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      alertNewProvider ? 'bg-primary' : 'bg-surface-variant'
-                    }`}
+                    onClick={() => setAlertNewcleaners(!alertNewcleaners)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${alertNewcleaners ? 'bg-primary' : 'bg-surface-variant'
+                      }`}
                   >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      alertNewProvider ? 'translate-x-6' : 'translate-x-1'
-                    }`} />
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${alertNewcleaners ? 'translate-x-6' : 'translate-x-1'
+                      }`} />
                   </button>
                 </div>
 
@@ -245,13 +242,11 @@ export default function AdminSystemSettings() {
                   </div>
                   <button
                     onClick={() => setAlertHighValue(!alertHighValue)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      alertHighValue ? 'bg-primary' : 'bg-surface-variant'
-                    }`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${alertHighValue ? 'bg-primary' : 'bg-surface-variant'
+                      }`}
                   >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      alertHighValue ? 'translate-x-6' : 'translate-x-1'
-                    }`} />
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${alertHighValue ? 'translate-x-6' : 'translate-x-1'
+                      }`} />
                   </button>
                 </div>
 
@@ -262,13 +257,11 @@ export default function AdminSystemSettings() {
                   </div>
                   <button
                     onClick={() => setAlertSystemErrors(!alertSystemErrors)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      alertSystemErrors ? 'bg-primary' : 'bg-surface-variant'
-                    }`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${alertSystemErrors ? 'bg-primary' : 'bg-surface-variant'
+                      }`}
                   >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      alertSystemErrors ? 'translate-x-6' : 'translate-x-1'
-                    }`} />
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${alertSystemErrors ? 'translate-x-6' : 'translate-x-1'
+                      }`} />
                   </button>
                 </div>
               </div>
@@ -343,13 +336,11 @@ export default function AdminSystemSettings() {
                   </div>
                   <button
                     onClick={() => setMaintenanceMode(!maintenanceMode)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      maintenanceMode ? 'bg-primary' : 'bg-surface-variant'
-                    }`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${maintenanceMode ? 'bg-primary' : 'bg-surface-variant'
+                      }`}
                   >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      maintenanceMode ? 'translate-x-6' : 'translate-x-1'
-                    }`} />
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${maintenanceMode ? 'translate-x-6' : 'translate-x-1'
+                      }`} />
                   </button>
                 </div>
 
@@ -377,17 +368,15 @@ export default function AdminSystemSettings() {
                 <div className="flex items-center justify-between p-4 bg-surface-container-low rounded-lg">
                   <div>
                     <h3 className="font-label-md text-on-surface">Super Admin Email Alerts</h3>
-                    <p className="font-body-sm text-on-surface-variant text-xs">Receive alerts for new provider applications and failed payments.</p>
+                    <p className="font-body-sm text-on-surface-variant text-xs">Receive alerts for new cleaners applications and failed payments.</p>
                   </div>
                   <button
                     onClick={() => setEmailAlerts(!emailAlerts)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      emailAlerts ? 'bg-primary' : 'bg-surface-variant'
-                    }`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${emailAlerts ? 'bg-primary' : 'bg-surface-variant'
+                      }`}
                   >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      emailAlerts ? 'translate-x-6' : 'translate-x-1'
-                    }`} />
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${emailAlerts ? 'translate-x-6' : 'translate-x-1'
+                      }`} />
                   </button>
                 </div>
               </div>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 
-export default function ProviderEarnings({ isStandalone = true, onNavigateTab }) {
+export default function cleanersEarnings({ isStandalone = true, onNavigateTab }) {
   const navigate = useNavigate();
   const [notified, setNotified] = useState(false);
 
@@ -46,7 +46,7 @@ export default function ProviderEarnings({ isStandalone = true, onNavigateTab })
             <span className="w-2.5 h-2.5 rounded-full bg-[#006688] animate-pulse"></span>
             <span className="font-['Geist'] text-xs font-semibold text-[#001e2b]">In Development</span>
           </div>
-          
+
           <h1 className="font-['Geist'] text-3xl md:text-5xl font-bold text-[#1a1c1e] tracking-tight">
             Earnings Insights <span className="text-[#0052ff]">Coming Soon</span>
           </h1>
@@ -57,15 +57,15 @@ export default function ProviderEarnings({ isStandalone = true, onNavigateTab })
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4 items-center w-full justify-center">
-          <button 
-            onClick={() => onNavigateTab ? onNavigateTab('dashboard') : navigate('/provider/dashboard')}
+          <button
+            onClick={() => onNavigateTab ? onNavigateTab('dashboard') : navigate('/cleaners/dashboard')}
             className="w-full sm:w-auto px-8 py-3.5 bg-[#003ec7] text-white font-['Geist'] text-sm font-semibold rounded-full shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer"
           >
             <span className="material-symbols-outlined text-[20px]">arrow_back</span>
             <span>Back to Dashboard</span>
           </button>
 
-          <button 
+          <button
             onClick={handleNotifyMe}
             className="w-full sm:w-auto px-8 py-3.5 bg-transparent border border-[#003ec7] text-[#003ec7] font-['Geist'] text-sm font-semibold rounded-full flex items-center justify-center gap-2 hover:bg-[#003ec7]/10 transition-colors duration-300 cursor-pointer"
           >

@@ -1,105 +1,107 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function AdminOrderManagement() {
   const [activeTab, setActiveTab] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   // Manual Order Form State
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerPhone, setNewCustomerPhone] = useState('');
-  const [newProvider, setNewProvider] = useState('Sparkle Cleaners Ltd');
-  const [newServiceType, setNewServiceType] = useState('Wash & Fold (10kg)');
+  const [newcleaners, setNewcleaners] = useState('Sparkle Cleaners Ltd');
+  const [newServiceType, setNewServiceType] = useState('Everyday Wash & Fold');
   const [newAmount, setNewAmount] = useState('1500');
 
-  const [orders, setOrders] = useState([
-    {
-      id: '#ORD-9021',
-      customer: 'David Kamau',
-      phone: '+254 712 345 678',
-      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAyfVjBIIeA2CgC87Kpa3_3gIZOOEnLTYEuj8Lxi8NIT2-iXuQ0Eq65M8cGEZMe75mZYxADjUrHozIdRxvLSyCkj9BaRkp0kWCDRnVp6HiS1deBBEC0kGdUG93UpGuSExzWNse929GVcL9dnkv3swBkXfunoD9Vnpj1MVoAObEFisgTTts524BGCAgQkqo4bFOqe_AP7ow-za4Ol1kNu080BjWdRi7SZupBiutST6BtQSbi5Gd2EwX66Q',
-      initials: null,
-      provider: 'Sparkle Cleaners Ltd',
-      serviceIcon: 'checkroom',
-      serviceType: 'Dry Cleaning (5 items)',
-      amount: 'KES 3,200',
-      status: 'In Progress',
-      statusType: 'in_progress',
-    },
-    {
-      id: '#ORD-9020',
-      customer: 'Alice Wanjiku',
-      phone: '+254 722 987 654',
-      avatar: null,
-      initials: 'AW',
-      initialsBg: 'bg-tertiary-container text-on-tertiary-container',
-      provider: 'Wash & Fold Hub',
-      serviceIcon: 'local_laundry_service',
-      serviceType: 'Wash & Fold (10kg)',
-      amount: 'KES 1,500',
-      status: 'Pending',
-      statusType: 'pending',
-    },
-    {
-      id: '#ORD-9019',
-      customer: 'Fatuma Hassan',
-      phone: '+254 733 112 233',
-      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBBb_lYuwAHO1ADmfdGeRooL67PnmTKuLLHYLy9vozctVS3h6J4ku8evStd5_nxjLQtj_IRXFdlhdI8HBPzws1nS6ZYmn_FARQNhz85OjAw5avS-3eKipEQtsDarr0izVAFp1gRYNzfqnJhQwEeWueWDOGyKnxSRhGBHzeSRGB3DZbZe7mipangKoAOu1qZyJ3aEk_fpKAmr3dmNmEfUNb1XEN-fHbAlJvSMyj6-ACPAi-JHsfSKjCI7w',
-      initials: null,
-      provider: 'Sparkle Cleaners Ltd',
-      serviceIcon: 'iron',
-      serviceType: 'Ironing Only (12 items)',
-      amount: 'KES 1,200',
-      status: 'Ready',
-      statusType: 'ready',
-    },
-    {
-      id: '#ORD-9018',
-      customer: 'Brian Kiprono',
-      phone: '+254 744 555 666',
-      avatar: null,
-      initials: 'BK',
-      initialsBg: 'bg-primary-container text-on-primary-container',
-      provider: 'Pristine Laundry Westlands',
-      serviceIcon: 'checkroom',
-      serviceType: 'Dry Cleaning (Suit)',
-      amount: 'KES 2,800',
-      status: 'Cancelled',
-      statusType: 'cancelled',
-    },
-  ]);
+  const [orders, setOrders] = useState([]);
 
-  const handleCreateOrderSubmit = (e) => {
+  // Fetch real MongoDB orders from Express Backend
+  const fetchOrders = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('http://localhost:5000/api/orders');
+      const json = await res.json();
+      if (json.success && json.data) {
+        const formattedOrders = json.data.map((o) => ({
+          id: o._id,
+          displayId: `#ORD-${o._id.slice(-6).toUpperCase()}`,
+          customer: o.customer?.fullName || 'Guest Customer',
+          phone: o.customer?.phone || '+254 700 000 000',
+          avatar: null,
+          initials: (o.customer?.fullName || 'GC').split(' ').map(n => n[0]).join('').slice(0, 2),
+          initialsBg: 'bg-primary-container text-on-primary-container',
+          cleaners: o.provider?.fullName || 'Sparkle Cleaners Ltd',
+          serviceIcon: 'local_laundry_service',
+          serviceType: o.items?.[0]?.name || 'Standard Laundry',
+          amount: `KES ${o.pricing?.grandTotal || o.totalAmount || 0}`,
+          status: o.status || 'Pending',
+          statusType: (o.status || 'Pending').toLowerCase().replace(' ', '_'),
+        }));
+        setOrders(formattedOrders);
+      }
+    } catch (err) {
+      console.error('Failed to fetch orders from MongoDB:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrders();
+  }, []);
+
+  const handleUpdateStatus = async (orderId, newStatus) => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      const json = await res.json();
+      if (json.success) {
+        fetchOrders();
+      }
+    } catch (err) {
+      console.error('Failed to update status in MongoDB:', err);
+    }
+    setActiveMenuId(null);
+  };
+
+  const handleCreateOrderSubmit = async (e) => {
     e.preventDefault();
     if (!newCustomerName || !newAmount) return;
-    const newOrd = {
-      id: `#ORD-${9022 + orders.length}`,
-      customer: newCustomerName,
-      phone: newCustomerPhone || '+254 700 000 000',
-      avatar: null,
-      initials: newCustomerName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-      initialsBg: 'bg-primary-container text-on-primary-container',
-      provider: newProvider,
-      serviceIcon: 'local_laundry_service',
-      serviceType: newServiceType,
-      amount: `KES ${parseInt(newAmount).toLocaleString()}`,
-      status: 'Pending',
-      statusType: 'pending',
-    };
-    setOrders([newOrd, ...orders]);
+
+    try {
+      const res = await fetch('http://localhost:5000/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [{ name: newServiceType, price: parseFloat(newAmount), quantity: 1 }],
+          pickupAddress: { street: 'Admin Created Address', city: 'Nairobi' }
+        })
+      });
+      const json = await res.json();
+      if (json.success) {
+        fetchOrders();
+      }
+    } catch (err) {
+      console.error('Error creating order in MongoDB:', err);
+    }
+
     setNewCustomerName('');
     setNewCustomerPhone('');
     setNewAmount('1500');
     setIsManualModalOpen(false);
   };
 
+
   const filteredOrders = orders.filter((o) => {
     const matchesTab = activeTab === 'All' || o.status === activeTab;
     const matchesSearch =
       o.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       o.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      o.provider.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      o.cleaners.toLowerCase().includes(searchTerm.toLowerCase()) ||
       o.serviceType.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesTab && matchesSearch;
   });
@@ -167,13 +169,13 @@ export default function AdminOrderManagement() {
           </div>
         </div>
 
-        {/* Ready for Pickup Card */}
-        <div 
+        {/* Already Delivered Card */}
+        <div
           onClick={() => setActiveTab('Ready')}
           className="bg-surface-container-lowest rounded-2xl p-6 shadow-xs hover:shadow-md transition-all duration-300 flex flex-col gap-4 relative overflow-hidden group border border-surface-container/40 cursor-pointer"
         >
           <div className="flex justify-between items-center">
-            <span className="font-label-md text-on-surface-variant uppercase tracking-wider">Ready for Pickup</span>
+            <span className="font-label-md text-on-surface-variant uppercase tracking-wider">Already Delivered</span>
             <div className="w-10 h-10 rounded-full bg-tertiary-container text-on-tertiary-container flex items-center justify-center group-hover:scale-110 transition-transform">
               <span className="material-symbols-outlined text-[20px]">check_circle</span>
             </div>
@@ -216,11 +218,10 @@ export default function AdminOrderManagement() {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 rounded-full font-label-md transition-colors cursor-pointer ${
-                  activeTab === tab
-                    ? 'bg-primary text-on-primary shadow-xs font-semibold'
-                    : 'bg-surface-container hover:bg-surface-variant text-on-surface-variant'
-                }`}
+                className={`px-4 py-2 rounded-full font-label-md transition-colors cursor-pointer ${activeTab === tab
+                  ? 'bg-primary text-on-primary shadow-xs font-semibold'
+                  : 'bg-surface-container hover:bg-surface-variant text-on-surface-variant'
+                  }`}
               >
                 {tab}
               </button>
@@ -253,7 +254,7 @@ export default function AdminOrderManagement() {
               <tr className="bg-surface-container/50">
                 <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">Order ID</th>
                 <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">Customer</th>
-                <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">Provider</th>
+                <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">cleaners</th>
                 <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">Service Type</th>
                 <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider text-right">Amount</th>
                 <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">Status</th>
@@ -263,7 +264,7 @@ export default function AdminOrderManagement() {
             <tbody className="font-body-sm text-on-surface divide-y divide-surface-container/50">
               {filteredOrders.map((o) => (
                 <tr key={o.id} className="hover:bg-surface-container/20 transition-colors group">
-                  <td className="py-4 px-6 font-label-md text-primary font-semibold">{o.id}</td>
+                  <td className="py-4 px-6 font-label-md text-primary font-semibold">{o.displayId || o.id}</td>
                   <td className="py-4 px-6">
                     <div className="flex items-center gap-3">
                       {o.avatar ? (
@@ -279,7 +280,7 @@ export default function AdminOrderManagement() {
                       </div>
                     </div>
                   </td>
-                  <td className="py-4 px-6 text-on-surface-variant font-medium">{o.provider}</td>
+                  <td className="py-4 px-6 text-on-surface-variant font-medium">{o.cleaners}</td>
                   <td className="py-4 px-6">
                     <div className="flex items-center gap-2">
                       <span className="material-symbols-outlined text-[16px] text-tertiary">{o.serviceIcon}</span>
@@ -288,24 +289,21 @@ export default function AdminOrderManagement() {
                   </td>
                   <td className="py-4 px-6 text-right font-label-md font-semibold">{o.amount}</td>
                   <td className="py-4 px-6">
-                    {o.statusType === 'in_progress' && (
+                    {o.statusType === 'in_progress' || o.statusType === 'in_wash' ? (
                       <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium bg-secondary-container/30 text-on-secondary-container">
-                        <span className="w-1.5 h-1.5 rounded-full bg-secondary mr-1.5" /> In Progress
+                        <span className="w-1.5 h-1.5 rounded-full bg-secondary mr-1.5" /> {o.status}
                       </span>
-                    )}
-                    {o.statusType === 'pending' && (
+                    ) : o.statusType === 'pending' ? (
                       <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium bg-surface-container text-on-surface-variant">
                         <span className="w-1.5 h-1.5 rounded-full bg-outline mr-1.5" /> Pending
                       </span>
-                    )}
-                    {o.statusType === 'ready' && (
+                    ) : o.statusType === 'ready' || o.statusType === 'ready_for_pickup' ? (
                       <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium bg-[#10b981]/20 text-[#047857]">
                         <span className="w-1.5 h-1.5 rounded-full bg-[#10b981] mr-1.5" /> Ready
                       </span>
-                    )}
-                    {o.statusType === 'cancelled' && (
+                    ) : (
                       <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium bg-error-container/30 text-error">
-                        <span className="w-1.5 h-1.5 rounded-full bg-error mr-1.5" /> Cancelled
+                        <span className="w-1.5 h-1.5 rounded-full bg-error mr-1.5" /> {o.status}
                       </span>
                     )}
                   </td>
@@ -323,19 +321,13 @@ export default function AdminOrderManagement() {
                     {activeMenuId === o.id && (
                       <div className="absolute right-6 top-10 bg-surface-container-lowest border border-surface-container rounded-lg shadow-lg py-1 w-40 z-30 text-left font-label-sm">
                         <button
-                          onClick={() => {
-                            setOrders(prev => prev.map(item => item.id === o.id ? { ...item, status: 'Ready', statusType: 'ready' } : item));
-                            setActiveMenuId(null);
-                          }}
+                          onClick={() => handleUpdateStatus(o.id, 'Ready_For_Pickup')}
                           className="w-full px-3 py-1.5 hover:bg-surface-container text-on-surface text-xs flex items-center gap-2 cursor-pointer"
                         >
                           <span className="material-symbols-outlined text-[16px]">check_circle</span> Mark Ready
                         </button>
                         <button
-                          onClick={() => {
-                            setOrders(prev => prev.map(item => item.id === o.id ? { ...item, status: 'Cancelled', statusType: 'cancelled' } : item));
-                            setActiveMenuId(null);
-                          }}
+                          onClick={() => handleUpdateStatus(o.id, 'Cancelled')}
                           className="w-full px-3 py-1.5 hover:bg-surface-container text-rose-600 text-xs flex items-center gap-2 cursor-pointer"
                         >
                           <span className="material-symbols-outlined text-[16px]">cancel</span> Cancel Order
@@ -346,6 +338,7 @@ export default function AdminOrderManagement() {
                 </tr>
               ))}
             </tbody>
+
           </table>
         </div>
 
@@ -411,10 +404,10 @@ export default function AdminOrderManagement() {
                 />
               </div>
               <div>
-                <label className="block font-label-sm text-on-surface mb-1">Assigned Provider</label>
+                <label className="block font-label-sm text-on-surface mb-1">Assigned cleaners</label>
                 <select
-                  value={newProvider}
-                  onChange={(e) => setNewProvider(e.target.value)}
+                  value={newcleaners}
+                  onChange={(e) => setNewcleaners(e.target.value)}
                   className="w-full bg-surface-container py-2.5 px-4 rounded-lg font-body-sm text-on-surface outline-none border border-transparent focus:border-primary"
                 >
                   <option value="Sparkle Cleaners Ltd">Sparkle Cleaners Ltd</option>

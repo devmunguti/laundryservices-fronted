@@ -44,7 +44,7 @@ export default function ProviderPortal() {
     <div className="bg-[#f9f9fc] font-['Inter'] text-[#1a1c1e] min-h-screen flex flex-col">
       {/* Mobile Sidebar Overlay */}
       {isMobileSidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/40 backdrop-blur-xs z-40 md:hidden"
           onClick={() => setIsMobileSidebarOpen(false)}
         />
@@ -53,7 +53,7 @@ export default function ProviderPortal() {
       {/* Persistent Single Sidebar */}
       <aside className={`fixed left-0 top-0 h-full w-72 bg-[#f3f3f6] z-50 flex flex-col shadow-[1px_0_0_0_rgba(0,0,0,0.05)] transition-transform duration-300 ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="px-8 py-6 flex items-center justify-end md:hidden">
-          <button 
+          <button
             className="text-[#434656] p-1 rounded-lg hover:bg-[#e8e8ea]"
             onClick={() => setIsMobileSidebarOpen(false)}
           >
@@ -68,11 +68,10 @@ export default function ProviderPortal() {
               <button
                 key={item.id}
                 onClick={() => handleTabChange(item.id)}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all gap-3 text-left font-['Geist'] text-sm font-medium cursor-pointer ${
-                  isActive
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all gap-3 text-left font-['Geist'] text-sm font-medium cursor-pointer ${isActive
                     ? 'bg-[#0052ff] text-[#dfe3ff] shadow-xs'
                     : 'text-[#434656] hover:bg-[#e8e8ea] hover:text-[#1a1c1e]'
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-[22px]">{item.icon}</span>
@@ -95,11 +94,10 @@ export default function ProviderPortal() {
               <button
                 key={item.id}
                 onClick={() => handleTabChange(item.id)}
-                className={`w-full flex items-center px-4 py-3 rounded-xl transition-all gap-3 text-left font-['Geist'] text-sm font-medium cursor-pointer ${
-                  isActive
+                className={`w-full flex items-center px-4 py-3 rounded-xl transition-all gap-3 text-left font-['Geist'] text-sm font-medium cursor-pointer ${isActive
                     ? 'bg-[#0052ff] text-[#dfe3ff]'
                     : 'text-[#434656] hover:bg-[#e8e8ea] hover:text-[#1a1c1e]'
-                }`}
+                  }`}
               >
                 <span className="material-symbols-outlined text-[22px]">{item.icon}</span>
                 <span>{item.label}</span>
@@ -114,7 +112,7 @@ export default function ProviderPortal() {
         {/* Persistent Top Header */}
         <header className="sticky top-0 right-0 h-20 bg-[#f9f9fc]/80 backdrop-blur-xl z-30 flex items-center justify-between px-6 md:px-10 shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
           <div className="flex items-center gap-4">
-            <button 
+            <button
               className="md:hidden text-[#434656] p-2 rounded-xl hover:bg-[#e8e8ea]"
               onClick={() => setIsMobileSidebarOpen(true)}
             >
@@ -128,20 +126,20 @@ export default function ProviderPortal() {
           </div>
 
           <div className="flex items-center gap-6">
-            <button 
+            <button
               onClick={() => alert('Notifications Panel: 3 unread order updates.')}
               className="relative p-2 text-[#434656] hover:bg-[#e8e8ea] rounded-full transition-colors cursor-pointer"
             >
               <span className="material-symbols-outlined text-[24px]">notifications</span>
               <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-[#ba1a1a] rounded-full ring-2 ring-white"></span>
             </button>
-            <div 
+            <div
               onClick={() => handleTabChange('profile')}
               className="flex items-center gap-3 pl-4 border-l border-[#c3c5d9]/40 cursor-pointer hover:opacity-80 transition-opacity"
             >
               <div className="text-right hidden sm:block">
                 <p className="font-['Geist'] font-medium text-sm text-[#1a1c1e]">Mama Safi Cleaning</p>
-                <p className="font-['Geist'] text-xs text-[#434656]">Provider Account</p>
+                <p className="font-['Geist'] text-xs text-[#434656]">cleaners Account</p>
               </div>
               <div className="w-10 h-10 rounded-full bg-[#003ec7] flex items-center justify-center shadow-sm">
                 <span className="material-symbols-outlined text-white text-[24px]">person</span>
@@ -225,7 +223,7 @@ function DashboardView({ onNavigateTab, dateRange, setDateRange, isDateDropdownO
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
-            <button 
+            <button
               onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
               className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#e8e8ea] hover:bg-[#e2e2e5] transition-colors text-[#1a1c1e] font-['Geist'] text-sm font-medium cursor-pointer"
             >
@@ -252,7 +250,7 @@ function DashboardView({ onNavigateTab, dateRange, setDateRange, isDateDropdownO
             )}
           </div>
 
-          <button 
+          <button
             onClick={() => onNavigateTab('orders')}
             className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#003ec7] text-white hover:bg-[#003ec7]/90 transition-colors shadow-sm font-['Geist'] text-sm font-medium cursor-pointer"
           >
@@ -454,7 +452,7 @@ function DashboardView({ onNavigateTab, dateRange, setDateRange, isDateDropdownO
                       </td>
                       <td className="py-4 px-4 text-right font-medium text-[#1a1c1e]">{order.amount}</td>
                       <td className="py-4 px-4 text-center">
-                        <button 
+                        <button
                           onClick={() => setSelectedOrder(order)}
                           className="w-8 h-8 rounded-full hover:bg-[#0052ff]/10 text-[#434656] hover:text-[#003ec7] flex items-center justify-center mx-auto transition-colors cursor-pointer"
                         >
@@ -478,7 +476,7 @@ function DashboardView({ onNavigateTab, dateRange, setDateRange, isDateDropdownO
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Online
               </span>
             </div>
-            <div 
+            <div
               className="w-full flex-1 rounded-2xl bg-[#eeeef0] relative overflow-hidden shadow-inner bg-cover bg-center"
               style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuA6EdW0T55mN0jFSAOMk84uUutt5IDjTrRzhV00ZhToBXKWrJVrhGBzhEzMBt8nYA5WqGIVqKWVfa1KcCQJMKDBVKCo8f-BFMqprwGRQHb1eNxcHDTX7TXM_B_ayWsRUL3Ek59S2RNslCmrm0jGBYQ_bgw6VBbDuex7P4ZBOlbnBa0KzNcHM8cbvyuBxfjIGpBJ95D1efLFgAkn-9TshKxfTkrE44GQybktK_GoOrK51mwKCUd7WNfj7w')" }}
             >
@@ -529,7 +527,7 @@ function DashboardView({ onNavigateTab, dateRange, setDateRange, isDateDropdownO
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative">
-            <button 
+            <button
               onClick={() => setSelectedOrder(null)}
               className="absolute top-6 right-6 text-[#434656] hover:bg-[#e8e8ea] rounded-full p-1 transition-colors"
             >

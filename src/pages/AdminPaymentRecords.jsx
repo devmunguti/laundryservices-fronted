@@ -8,12 +8,12 @@ export default function AdminPaymentRecords() {
   const [activeMenuId, setActiveMenuId] = useState(null);
 
   const [records, setRecords] = useState([
-    { id: '#ORD-9921', date: 'Oct 24, 14:30', provider: 'Sparkle Dry Cleaners', customer: 'Jane Wanjiku', amount: '2,500', comm: '375', status: 'Pending' },
-    { id: '#ORD-9920', date: 'Oct 24, 11:15', provider: 'Nairobi Fresh Wash', customer: 'David Omondi', amount: '1,800', comm: '270', status: 'Completed' },
-    { id: '#ORD-9919', date: 'Oct 23, 16:45', provider: 'Sparkle Dry Cleaners', customer: 'Mary Kamau', amount: '4,200', comm: '630', status: 'Pending' },
-    { id: '#ORD-9918', date: 'Oct 23, 09:00', provider: 'Westlands Laundry Hub', customer: 'Peter Njoroge', amount: '950', comm: '142.5', status: 'Completed' },
-    { id: '#ORD-9917', date: 'Oct 22, 18:20', provider: 'FreshPress Kilimani', customer: 'Alice Kamau', amount: '3,400', comm: '510', status: 'Completed' },
-    { id: '#ORD-9916', date: 'Oct 22, 15:10', provider: 'CleanCraft Karen', customer: 'Brian Otieno', amount: '5,100', comm: '765', status: 'Pending' },
+    { id: '#ORD-9921', date: 'Oct 24, 14:30', cleaners: 'Sparkle Dry Cleaners', customer: 'Jane Wanjiku', amount: '2,500', comm: '375', status: 'Pending' },
+    { id: '#ORD-9920', date: 'Oct 24, 11:15', cleaners: 'Nairobi Fresh Wash', customer: 'David Omondi', amount: '1,800', comm: '270', status: 'Completed' },
+    { id: '#ORD-9919', date: 'Oct 23, 16:45', cleaners: 'Sparkle Dry Cleaners', customer: 'Mary Kamau', amount: '4,200', comm: '630', status: 'Pending' },
+    { id: '#ORD-9918', date: 'Oct 23, 09:00', cleaners: 'Westlands Laundry Hub', customer: 'Peter Njoroge', amount: '950', comm: '142.5', status: 'Completed' },
+    { id: '#ORD-9917', date: 'Oct 22, 18:20', cleaners: 'FreshPress Kilimani', customer: 'Alice Kamau', amount: '3,400', comm: '510', status: 'Completed' },
+    { id: '#ORD-9916', date: 'Oct 22, 15:10', cleaners: 'CleanCraft Karen', customer: 'Brian Otieno', amount: '5,100', comm: '765', status: 'Pending' },
   ]);
 
   const handleProcessPayouts = () => {
@@ -30,9 +30,9 @@ export default function AdminPaymentRecords() {
   };
 
   const handleExportCSV = () => {
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + ["Order ID,Date,Provider,Customer,Amount (KES),Commission (KES),Payout Status"]
-        .concat(records.map(r => `${r.id},${r.date},${r.provider},${r.customer},${r.amount},${r.comm},${r.status}`))
+    const csvContent = "data:text/csv;charset=utf-8,"
+      + ["Order ID,Date,cleaners,Customer,Amount (KES),Commission (KES),Payout Status"]
+        .concat(records.map(r => `${r.id},${r.date},${r.cleaners},${r.customer},${r.amount},${r.comm},${r.status}`))
         .join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -46,8 +46,8 @@ export default function AdminPaymentRecords() {
   const filteredRecords = records.filter(r => {
     const matchesFilter = filter === 'All' || r.status === filter;
     const matchesSearch = r.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          r.provider.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          r.customer.toLowerCase().includes(searchTerm.toLowerCase());
+      r.cleaners.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.customer.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesFilter && matchesSearch;
   });
 
@@ -58,7 +58,7 @@ export default function AdminPaymentRecords() {
         <div>
           <h1 className="font-headline-xl text-on-surface mb-2">Financial Overview</h1>
           <p className="font-body-lg text-on-surface-variant">
-            Track payments, monitor commissions, and manage provider payouts.
+            Track payments, monitor commissions, and manage cleaners payouts.
           </p>
         </div>
         <div className="flex items-center gap-stack-gap-sm">
@@ -73,13 +73,12 @@ export default function AdminPaymentRecords() {
           <button
             onClick={handleProcessPayouts}
             disabled={isProcessingPayouts}
-            className={`font-label-md py-2 px-4 rounded-lg shadow-md transition-all flex items-center gap-2 cursor-pointer ${
-              payoutSuccess
+            className={`font-label-md py-2 px-4 rounded-lg shadow-md transition-all flex items-center gap-2 cursor-pointer ${payoutSuccess
                 ? 'bg-secondary-container text-on-secondary-container'
                 : isProcessingPayouts
-                ? 'bg-primary/80 text-on-primary cursor-not-allowed'
-                : 'bg-primary hover:bg-on-primary-fixed-variant text-on-primary'
-            }`}
+                  ? 'bg-primary/80 text-on-primary cursor-not-allowed'
+                  : 'bg-primary hover:bg-on-primary-fixed-variant text-on-primary'
+              }`}
           >
             {isProcessingPayouts ? (
               <>
@@ -158,8 +157,8 @@ export default function AdminPaymentRecords() {
             </div>
             <p className="font-body-sm text-error/80">
               {records.some(r => r.status === 'Pending')
-                ? 'Outstanding commissions to collect from 12 providers'
-                : 'All provider payouts settled'}
+                ? 'Outstanding commissions to collect from 12 cleanerss'
+                : 'All cleaners payouts settled'}
             </p>
           </div>
         </div>
@@ -170,31 +169,28 @@ export default function AdminPaymentRecords() {
         <div className="flex gap-2 w-full sm:w-auto">
           <button
             onClick={() => setFilter('All')}
-            className={`px-4 py-2 rounded-lg font-label-md transition-colors cursor-pointer ${
-              filter === 'All'
+            className={`px-4 py-2 rounded-lg font-label-md transition-colors cursor-pointer ${filter === 'All'
                 ? 'bg-surface-container text-on-surface font-semibold'
                 : 'text-on-surface-variant hover:bg-surface-container-low'
-            }`}
+              }`}
           >
             All
           </button>
           <button
             onClick={() => setFilter('Pending')}
-            className={`px-4 py-2 rounded-lg font-label-md transition-colors cursor-pointer ${
-              filter === 'Pending'
+            className={`px-4 py-2 rounded-lg font-label-md transition-colors cursor-pointer ${filter === 'Pending'
                 ? 'bg-error-container/30 text-error font-semibold'
                 : 'text-on-surface-variant hover:bg-surface-container-low'
-            }`}
+              }`}
           >
             Pending
           </button>
           <button
             onClick={() => setFilter('Completed')}
-            className={`px-4 py-2 rounded-lg font-label-md transition-colors cursor-pointer ${
-              filter === 'Completed'
+            className={`px-4 py-2 rounded-lg font-label-md transition-colors cursor-pointer ${filter === 'Completed'
                 ? 'bg-primary-container/20 text-primary font-semibold'
                 : 'text-on-surface-variant hover:bg-surface-container-low'
-            }`}
+              }`}
           >
             Completed
           </button>
@@ -222,7 +218,7 @@ export default function AdminPaymentRecords() {
               <tr className="bg-surface-container-low">
                 <th className="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider">Order ID</th>
                 <th className="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider">Date</th>
-                <th className="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider">Provider</th>
+                <th className="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider">cleaners</th>
                 <th className="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider">Customer</th>
                 <th className="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider text-right">Amount (KES)</th>
                 <th className="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider text-right">Comm. (KES)</th>
@@ -238,7 +234,7 @@ export default function AdminPaymentRecords() {
                 >
                   <td className="px-6 py-4 font-label-md font-semibold">{row.id}</td>
                   <td className="px-6 py-4 text-on-surface-variant">{row.date}</td>
-                  <td className="px-6 py-4 font-medium">{row.provider}</td>
+                  <td className="px-6 py-4 font-medium">{row.cleaners}</td>
                   <td className="px-6 py-4">{row.customer}</td>
                   <td className="px-6 py-4 text-right font-label-md font-semibold">{row.amount}</td>
                   <td className="px-6 py-4 text-right text-secondary font-label-md font-semibold">{row.comm}</td>

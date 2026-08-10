@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 
-export default function ProviderReviews({ isStandalone = true }) {
+export default function cleanersReviews({ isStandalone = true }) {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [ratingFilter, setRatingFilter] = useState('all');
@@ -68,8 +68,8 @@ export default function ProviderReviews({ isStandalone = true }) {
 
   const filteredReviews = reviews.filter(rev => {
     const matchesSearch = rev.customer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          rev.comment.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          rev.orderId.toLowerCase().includes(searchQuery.toLowerCase());
+      rev.comment.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      rev.orderId.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesRating = ratingFilter === 'all' || rev.rating === parseInt(ratingFilter, 10);
     return matchesSearch && matchesRating;
   });
@@ -82,12 +82,12 @@ export default function ProviderReviews({ isStandalone = true }) {
           <h1 className="font-['Geist'] text-3xl md:text-4xl font-bold text-[#1a1c1e] tracking-tight">Customer Reviews</h1>
           <p className="text-base text-[#434656] mt-1">Manage feedback and build trust with your clients.</p>
         </div>
-        
+
         <div className="flex flex-col sm:flex-row items-center gap-3">
           <div className="relative w-full sm:w-64">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#434656] text-[20px]">search</span>
-            <input 
-              type="text" 
+            <input
+              type="text"
               placeholder="Search reviews..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -147,9 +147,9 @@ export default function ProviderReviews({ isStandalone = true }) {
               <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mb-3">
                 <span className="material-symbols-outlined text-white">verified</span>
               </div>
-              <h3 className="font-['Geist'] text-lg font-bold mb-1">Top Rated Provider</h3>
+              <h3 className="font-['Geist'] text-lg font-bold mb-1">Top Rated cleaners</h3>
               <p className="font-['Inter'] text-xs text-[#dfe3ff] leading-relaxed">
-                You are in the top 5% of providers in your area this month. Keep up the excellent work!
+                You are in the top 5% of cleanerss in your area this month. Keep up the excellent work!
               </p>
             </div>
           </div>

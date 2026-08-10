@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 
-export default function ProviderOrders({ isStandalone = true }) {
+export default function cleanersOrders({ isStandalone = true }) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('orders');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -10,130 +10,70 @@ export default function ProviderOrders({ isStandalone = true }) {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [updatingOrderId, setUpdatingOrderId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [loading, setLoading] = useState(true);
 
   // Orders State
-  const [orders, setOrders] = useState([
-    {
-      id: '#ORD-092',
-      customer: 'John Doe',
-      avatarInitials: 'JD',
-      avatarBg: 'bg-[#dde1ff] text-[#001452]',
-      address: 'Kileleshwa, Apt 4B',
-      service: 'Wash & Fold',
-      serviceIcon: 'local_laundry_service',
-      itemCount: '5 items',
-      date: 'Oct 24, 2023',
-      time: '09:30 AM',
-      status: 'in-progress',
-      statusLabel: 'In Progress',
-      statusBg: 'bg-[#c2e8ff]/40 text-[#004d67]',
-      statusDot: 'bg-[#006688]',
-      amount: 'KES 1,250'
-    },
-    {
-      id: '#ORD-091',
-      customer: 'Sarah Mutua',
-      avatarInitials: 'SM',
-      avatarBg: 'bg-[#e8def8] text-[#1d192b]',
-      address: 'Westlands, Riverside Dr',
-      service: 'Dry Cleaning',
-      serviceIcon: 'iron',
-      itemCount: '2 Suits',
-      date: 'Oct 24, 2023',
-      time: '08:15 AM',
-      status: 'pending',
-      statusLabel: 'Pending Pickup',
-      statusBg: 'bg-amber-100 text-amber-900',
-      statusDot: 'bg-amber-600',
-      amount: 'KES 2,800'
-    },
-    {
-      id: '#ORD-090',
-      customer: 'Eric Kamau',
-      avatarInitials: 'EK',
-      avatarBg: 'bg-[#c4eed0] text-[#003816]',
-      address: 'Kilimani, Argwings Kodhek',
-      service: 'Ironing Only',
-      serviceIcon: 'checkroom',
-      itemCount: '10 Shirts',
-      date: 'Oct 23, 2023',
-      time: '16:45 PM',
-      status: 'ready-for-pickup',
-      statusLabel: 'Ready for Delivery',
-      statusBg: 'bg-[#0052ff]/20 text-[#0038b6]',
-      statusDot: 'bg-[#0052ff]',
-      amount: 'KES 1,500'
-    },
-    {
-      id: '#ORD-089',
-      customer: 'Amina Hassan',
-      avatarInitials: 'AH',
-      avatarBg: 'bg-[#ffdad6] text-[#93000a]',
-      address: 'Lavington, James Gichuru',
-      service: 'Express Wash & Iron',
-      serviceIcon: 'bolt',
-      itemCount: '8kg Laundry',
-      date: 'Oct 23, 2023',
-      time: '14:20 PM',
-      status: 'completed',
-      statusLabel: 'Completed',
-      statusBg: 'bg-emerald-100 text-emerald-800',
-      statusDot: 'bg-emerald-600',
-      amount: 'KES 3,200'
-    },
-    {
-      id: '#ORD-088',
-      customer: 'Brian Omondi',
-      avatarInitials: 'BO',
-      avatarBg: 'bg-[#eeeef0] text-[#1a1c1e]',
-      address: 'Parklands, 4th Parklands',
-      service: 'Duvet & Carpet Cleaning',
-      serviceIcon: 'dry_cleaning',
-      itemCount: '1 King Duvet, 1 Rug',
-      date: 'Oct 22, 2023',
-      time: '11:00 AM',
-      status: 'cancelled',
-      statusLabel: 'Cancelled',
-      statusBg: 'bg-[#eeeef0] text-[#737688]',
-      statusDot: 'bg-[#737688]',
-      amount: 'KES 4,500'
-    }
-  ]);
+  const [orders, setOrders] = useState([]);
 
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/provider/dashboard' },
-    { id: 'orders', label: 'Orders', icon: 'receipt_long', badge: '12', path: '/provider/orders' },
-    { id: 'services', label: 'Services', icon: 'local_laundry_service', path: '/provider/services' },
-    { id: 'reviews', label: 'Reviews', icon: 'star_rate', path: '/provider/reviews' },
-    { id: 'earnings', label: 'Earnings', icon: 'payments', path: '/provider/earnings' },
-    { id: 'payment-channels', label: 'Payment Channels', icon: 'account_balance_wallet', path: '/provider/payment-channels' },
-  ];
-
-  const secondaryNavItems = [
-    { id: 'profile', label: 'Profile', icon: 'person', path: '/provider/profile' },
-    { id: 'settings', label: 'Settings', icon: 'settings', path: '/provider/settings' },
-  ];
-
-  const handleUpdateStatus = (id, newStatus, newLabel, newBg, newDot) => {
-    setOrders(prev => prev.map(o => {
-      if (o.id === id) {
-        return {
-          ...o,
-          status: newStatus,
-          statusLabel: newLabel,
-          statusBg: newBg,
-          statusDot: newDot
-        };
+  const fetchOrders = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('http://localhost:5000/api/orders');
+      const json = await res.json();
+      if (json.success && json.data) {
+        const formatted = json.data.map((o) => ({
+          id: `#ORD-${o._id.slice(-6).toUpperCase()}`,
+          rawId: o._id,
+          customer: o.customer?.fullName || 'Guest Customer',
+          avatarInitials: (o.customer?.fullName || 'GC').split(' ').map(n => n[0]).join('').slice(0, 2),
+          avatarBg: 'bg-[#dde1ff] text-[#001452]',
+          address: o.pickupAddress?.street || 'Nairobi',
+          service: o.items?.[0]?.name || 'Standard Wash',
+          serviceIcon: 'local_laundry_service',
+          itemCount: `${o.items?.length || 1} item(s)`,
+          date: new Date(o.createdAt || Date.now()).toLocaleDateString(),
+          time: new Date(o.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          status: (o.status || 'Pending').toLowerCase().replace(' ', '-'),
+          statusLabel: o.status || 'Pending',
+          statusBg: o.status === 'Cancelled' ? 'bg-[#eeeef0] text-[#737688]' : 'bg-[#c2e8ff]/40 text-[#004d67]',
+          statusDot: o.status === 'Cancelled' ? 'bg-[#737688]' : 'bg-[#006688]',
+          amount: `KES ${o.pricing?.grandTotal || o.totalAmount || 0}`
+        }));
+        setOrders(formatted);
       }
-      return o;
-    }));
+    } catch (err) {
+      console.error('Failed to fetch provider orders:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrders();
+  }, []);
+
+  const handleUpdateStatus = async (rawId, newMongoStatus) => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/orders/${rawId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newMongoStatus })
+      });
+      const json = await res.json();
+      if (json.success) {
+        fetchOrders();
+      }
+    } catch (err) {
+      console.error('Failed to update order status in MongoDB:', err);
+    }
     setUpdatingOrderId(null);
   };
 
+
   const filteredOrders = orders.filter(ord => {
     const matchesSearch = ord.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          ord.customer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          ord.service.toLowerCase().includes(searchQuery.toLowerCase());
+      ord.customer.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      ord.service.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesTab = filterTab === 'all' || ord.status === filterTab;
     return matchesSearch && matchesTab;
   });
@@ -201,8 +141,8 @@ export default function ProviderOrders({ isStandalone = true }) {
             <div className="flex flex-col sm:flex-row items-center gap-4">
               <div className="relative w-full sm:w-64">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#434656] text-[20px]">search</span>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   placeholder="Search orders..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -221,7 +161,7 @@ export default function ProviderOrders({ isStandalone = true }) {
               { id: 'all', label: 'All Orders' },
               { id: 'pending', label: 'Pending' },
               { id: 'in-progress', label: 'In Progress' },
-              { id: 'ready-for-pickup', label: 'Ready for Pickup', count: 12 },
+              { id: 'ready-for-pickup', label: 'Already Delivered', count: 12 },
               { id: 'completed', label: 'Completed' },
               { id: 'cancelled', label: 'Cancelled' },
             ].map((tab) => {
@@ -230,11 +170,10 @@ export default function ProviderOrders({ isStandalone = true }) {
                 <button
                   key={tab.id}
                   onClick={() => setFilterTab(tab.id)}
-                  className={`px-4 py-2 rounded-full font-['Geist'] text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
-                    isSelected
-                      ? 'bg-[#0052ff] text-[#dfe3ff] shadow-xs'
-                      : 'bg-[#f3f3f6] text-[#434656] hover:bg-[#e8e8ea] hover:text-[#1a1c1e]'
-                  }`}
+                  className={`px-4 py-2 rounded-full font-['Geist'] text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${isSelected
+                    ? 'bg-[#0052ff] text-[#dfe3ff] shadow-xs'
+                    : 'bg-[#f3f3f6] text-[#434656] hover:bg-[#e8e8ea] hover:text-[#1a1c1e]'
+                    }`}
                 >
                   <span>{tab.label}</span>
                   {tab.count && (
@@ -304,16 +243,16 @@ export default function ProviderOrders({ isStandalone = true }) {
                     <td className="text-right font-['Geist'] font-semibold text-[#1a1c1e] px-6 py-6">{ord.amount}</td>
                     <td className="px-6 py-6">
                       <div className="flex items-center justify-center gap-1">
-                        <button 
+                        <button
                           onClick={() => setSelectedOrder(ord)}
-                          className="w-8 h-8 rounded-full hover:bg-[#e8e8ea] flex items-center justify-center text-[#434656] hover:text-[#003ec7] transition-colors cursor-pointer" 
+                          className="w-8 h-8 rounded-full hover:bg-[#e8e8ea] flex items-center justify-center text-[#434656] hover:text-[#003ec7] transition-colors cursor-pointer"
                           title="View Details"
                         >
                           <span className="material-symbols-outlined text-[18px]">visibility</span>
                         </button>
-                        <button 
+                        <button
                           onClick={() => setUpdatingOrderId(ord.id)}
-                          className="w-8 h-8 rounded-full hover:bg-[#e8e8ea] flex items-center justify-center text-[#434656] hover:text-[#003ec7] transition-colors cursor-pointer" 
+                          className="w-8 h-8 rounded-full hover:bg-[#e8e8ea] flex items-center justify-center text-[#434656] hover:text-[#003ec7] transition-colors cursor-pointer"
                           title="Update Status"
                         >
                           <span className="material-symbols-outlined text-[18px]">edit</span>
@@ -331,7 +270,7 @@ export default function ProviderOrders({ isStandalone = true }) {
         <div className="border-t border-[#c3c5d9]/30 flex flex-col sm:flex-row items-center justify-between text-[#434656] font-['Inter'] text-sm p-6 gap-4">
           <p>Showing 1 to {filteredOrders.length} of 142 entries</p>
           <div className="flex items-center gap-1.5">
-            <button 
+            <button
               disabled={currentPage === 1}
               onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
               className="w-8 h-8 rounded-lg bg-[#f3f3f6] hover:bg-[#e8e8ea] flex items-center justify-center transition-colors disabled:opacity-50"
@@ -343,22 +282,21 @@ export default function ProviderOrders({ isStandalone = true }) {
               <button
                 key={page}
                 onClick={() => setCurrentPage(page)}
-                className={`w-8 h-8 rounded-lg font-['Geist'] text-xs font-semibold flex items-center justify-center transition-all ${
-                  currentPage === page ? 'bg-[#0052ff] text-white shadow-xs' : 'bg-white hover:bg-[#f3f3f6] text-[#1a1c1e]'
-                }`}
+                className={`w-8 h-8 rounded-lg font-['Geist'] text-xs font-semibold flex items-center justify-center transition-all ${currentPage === page ? 'bg-[#0052ff] text-white shadow-xs' : 'bg-white hover:bg-[#f3f3f6] text-[#1a1c1e]'
+                  }`}
               >
                 {page}
               </button>
             ))}
             <span className="px-1 text-xs">...</span>
-            <button 
+            <button
               onClick={() => setCurrentPage(15)}
               className="w-8 h-8 rounded-lg bg-white hover:bg-[#f3f3f6] font-['Geist'] text-xs font-semibold flex items-center justify-center transition-colors text-[#1a1c1e]"
             >
               15
             </button>
 
-            <button 
+            <button
               onClick={() => setCurrentPage(prev => Math.min(prev + 1, 15))}
               className="w-8 h-8 rounded-lg bg-[#f3f3f6] hover:bg-[#e8e8ea] flex items-center justify-center transition-colors"
             >
@@ -372,7 +310,7 @@ export default function ProviderOrders({ isStandalone = true }) {
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative">
-            <button 
+            <button
               onClick={() => setSelectedOrder(null)}
               className="absolute top-6 right-6 text-[#434656] hover:bg-[#e8e8ea] rounded-full p-1 transition-colors"
             >
@@ -403,7 +341,7 @@ export default function ProviderOrders({ isStandalone = true }) {
               </div>
             </div>
             <div className="mt-6">
-              <button 
+              <button
                 onClick={() => setSelectedOrder(null)}
                 className="w-full py-2.5 bg-[#003ec7] text-white rounded-full font-['Geist'] text-sm font-medium hover:bg-[#0038b6] transition-colors"
               >
@@ -418,7 +356,7 @@ export default function ProviderOrders({ isStandalone = true }) {
       {updatingOrderId && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl relative">
-            <button 
+            <button
               onClick={() => setUpdatingOrderId(null)}
               className="absolute top-6 right-6 text-[#434656] hover:bg-[#e8e8ea] rounded-full p-1 transition-colors"
             >
@@ -427,25 +365,29 @@ export default function ProviderOrders({ isStandalone = true }) {
             <h3 className="font-['Geist'] text-xl font-bold text-[#1a1c1e] mb-4">Update Status for {updatingOrderId}</h3>
             <div className="space-y-2">
               {[
-                { status: 'pending', label: 'Pending Pickup', bg: 'bg-amber-100 text-amber-900', dot: 'bg-amber-600' },
-                { status: 'in-progress', label: 'In Progress', bg: 'bg-[#c2e8ff]/40 text-[#004d67]', dot: 'bg-[#006688]' },
-                { status: 'ready-for-pickup', label: 'Ready for Delivery', bg: 'bg-[#0052ff]/20 text-[#0038b6]', dot: 'bg-[#0052ff]' },
-                { status: 'completed', label: 'Completed', bg: 'bg-emerald-100 text-emerald-800', dot: 'bg-emerald-600' },
-                { status: 'cancelled', label: 'Cancelled', bg: 'bg-[#eeeef0] text-[#737688]', dot: 'bg-[#737688]' },
-              ].map(opt => (
-                <button
-                  key={opt.status}
-                  onClick={() => handleUpdateStatus(updatingOrderId, opt.status, opt.label, opt.bg, opt.dot)}
-                  className="w-full text-left px-4 py-3 rounded-xl border border-[#c3c5d9]/30 hover:bg-[#f3f3f6] font-['Geist'] text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer"
-                >
-                  <span className={`w-2 h-2 rounded-full ${opt.dot}`}></span>
-                  <span>{opt.label}</span>
-                </button>
-              ))}
+                { status: 'Pending', label: 'Pending Pickup', bg: 'bg-amber-100 text-amber-900', dot: 'bg-amber-600' },
+                { status: 'In_Wash', label: 'In Progress', bg: 'bg-[#c2e8ff]/40 text-[#004d67]', dot: 'bg-[#006688]' },
+                { status: 'Ready_For_Delivery', label: 'Ready for Delivery', bg: 'bg-[#0052ff]/20 text-[#0038b6]', dot: 'bg-[#0052ff]' },
+                { status: 'Delivered', label: 'Completed', bg: 'bg-emerald-100 text-emerald-800', dot: 'bg-emerald-600' },
+                { status: 'Cancelled', label: 'Cancelled', bg: 'bg-[#eeeef0] text-[#737688]', dot: 'bg-[#737688]' },
+              ].map(opt => {
+                const targetOrd = orders.find(o => o.id === updatingOrderId);
+                return (
+                  <button
+                    key={opt.status}
+                    onClick={() => targetOrd && handleUpdateStatus(targetOrd.rawId, opt.status)}
+                    className="w-full text-left px-4 py-3 rounded-xl border border-[#c3c5d9]/30 hover:bg-[#f3f3f6] font-['Geist'] text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <span className={`w-2 h-2 rounded-full ${opt.dot}`}></span>
+                    <span>{opt.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 
@@ -456,14 +398,14 @@ export default function ProviderOrders({ isStandalone = true }) {
   return (
     <div className="bg-[#f9f9fc] font-['Inter'] text-[#1a1c1e] min-h-screen flex flex-col">
       {isMobileSidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/40 backdrop-blur-xs z-40 md:hidden"
           onClick={() => setIsMobileSidebarOpen(false)}
         />
       )}
       <aside className={`fixed left-0 top-0 h-full w-72 bg-[#f3f3f6] z-50 flex flex-col shadow-[1px_0_0_0_rgba(0,0,0,0.05)] transition-transform duration-300 ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="px-8 py-6 flex items-center justify-end md:hidden">
-          <button 
+          <button
             className="text-[#434656] p-1 rounded-lg hover:bg-[#e8e8ea]"
             onClick={() => setIsMobileSidebarOpen(false)}
           >
@@ -475,9 +417,8 @@ export default function ProviderOrders({ isStandalone = true }) {
             <button
               key={item.id}
               onClick={() => navigate(item.path)}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all gap-3 text-left font-['Geist'] text-sm font-medium ${
-                activeTab === item.id ? 'bg-[#0052ff] text-[#dfe3ff]' : 'text-[#434656] hover:bg-[#e8e8ea]'
-              }`}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all gap-3 text-left font-['Geist'] text-sm font-medium ${activeTab === item.id ? 'bg-[#0052ff] text-[#dfe3ff]' : 'text-[#434656] hover:bg-[#e8e8ea]'
+                }`}
             >
               <div className="flex items-center gap-3">
                 <span className="material-symbols-outlined text-[22px]">{item.icon}</span>
