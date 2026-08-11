@@ -1,100 +1,203 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { auditLogApi } from '../api/auditLogApi';
 
 export default function AdminUserLogs() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [timeRange, setTimeRange] = useState('Today');
   const [selectedDate, setSelectedDate] = useState('');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [statusFilter, setStatusFilter] = useState('All');
+  const [categoryFilter, setCategoryFilter] = useState('All');
 
-  const [logs, setLogs] = useState([
-    {
-      id: 1,
-      date: 'Oct 24, 2023',
-      time: '14:32:01 EAT',
-      user: 'Jane Smith',
-      role: 'Admin',
-      initials: 'JS',
-      avatarBg: 'bg-primary-container text-on-primary-container',
-      action: 'cleaners Approved',
-      details: "Approved 'Sparkle Cleaners' onboarding request.",
-      ip: '192.168.1.104',
-      status: 'Success',
-      isError: false,
-    },
-    {
-      id: 2,
-      date: 'Oct 24, 2023',
-      time: '12:15:45 EAT',
-      user: 'System Auto',
-      role: 'Bot',
-      initials: null,
-      icon: 'smart_toy',
-      avatarBg: 'bg-surface-variant text-on-surface-variant',
-      action: 'Daily Backup',
-      details: 'Completed database snapshot to S3.',
-      ip: '10.0.0.52',
-      status: 'Success',
-      isError: false,
-    },
-    {
-      id: 3,
-      date: 'Oct 24, 2023',
-      time: '09:05:12 EAT',
-      user: 'Unknown User',
-      role: 'Unauthenticated',
-      initials: '?',
-      avatarBg: 'bg-surface-variant text-on-surface-variant',
-      action: 'Failed Login',
-      details: 'Invalid password for admin@auralaundry.co.ke',
-      ip: '41.80.12.221',
-      status: 'Failed',
-      isError: true,
-    },
-    {
-      id: 4,
-      date: 'Oct 23, 2023',
-      time: '16:45:00 EAT',
-      user: 'Mike Waweru',
-      role: 'Support',
-      initials: 'MW',
-      avatarBg: 'bg-tertiary-container text-on-tertiary-container',
-      action: 'Refund Processed',
-      details: 'Order #ORD-8821 full refund (KSH 1,500).',
-      ip: '192.168.1.112',
-      status: 'Success',
-      isError: false,
-    },
-  ]);
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPreviousPage: false
+  });
 
-  const handleExportCSV = () => {
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      ['Date,Time,User,Role,Action,Details,IP,Status']
-        .concat(
-          filteredLogs.map(
-            (l) => `${l.date},${l.time},"${l.user}",${l.role},"${l.action}","${l.details}",${l.ip},${l.status}`
-          )
-        )
-        .join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', 'Aura_Laundry_System_Logs.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  // Data & Loading states
+  const [logs, setLogs] = useState([]);
+  const [metrics, setMetrics] = useState({
+    totalEventsToday: 0,
+    failedLoginAttempts: 0,
+    criticalActions: 0
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Debounce search input (300ms)
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
+
+  // Reset page to 1 when filters change
+  const handleStatusFilter = (newStatus) => {
+    setStatusFilter(newStatus);
+    setPage(1);
   };
 
-  const filteredLogs = logs.filter((log) => {
-    const matchesSearch =
-      log.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.details.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.ip.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'All' || log.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const handleTimeRangeFilter = (newRange) => {
+    setTimeRange(newRange);
+    setSelectedDate('');
+    setPage(1);
+  };
+
+  const handleDateChange = (e) => {
+    const dateVal = e.target.value;
+    setSelectedDate(dateVal);
+    if (dateVal) setTimeRange('');
+    setPage(1);
+  };
+
+  // Fetch Audit Metrics
+  const fetchMetrics = async () => {
+    try {
+      const res = await auditLogApi.getAuditMetrics();
+      if (res.success && res.data) {
+        setMetrics(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to load audit metrics:', err);
+    }
+  };
+
+  // Fetch Audit Logs from Backend API
+  const fetchLogs = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const params = {
+        page,
+        limit,
+        search: debouncedSearch,
+        status: statusFilter !== 'All' ? statusFilter : undefined,
+        category: categoryFilter !== 'All' ? categoryFilter : undefined,
+        timeRange: !selectedDate ? timeRange : undefined,
+        date: selectedDate || undefined
+      };
+
+      const res = await auditLogApi.getAuditLogs(params);
+      if (res.success && res.data) {
+        setLogs(res.data.logs || []);
+        if (res.data.pagination) {
+          setPagination(res.data.pagination);
+        }
+      } else {
+        setError(res.message || 'Failed to load audit logs.');
+      }
+    } catch (err) {
+      console.error('Error fetching audit logs:', err);
+      setError(err.response?.data?.message || err.message || 'Error connecting to server.');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, limit, debouncedSearch, statusFilter, categoryFilter, timeRange, selectedDate]);
+
+  useEffect(() => {
+    fetchMetrics();
+  }, []);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
+
+  // CSV Export Handler
+  const handleExportCSV = async () => {
+    try {
+      const params = {
+        search: debouncedSearch,
+        status: statusFilter !== 'All' ? statusFilter : undefined,
+        category: categoryFilter !== 'All' ? categoryFilter : undefined,
+        timeRange: !selectedDate ? timeRange : undefined,
+        date: selectedDate || undefined
+      };
+
+      const blobData = await auditLogApi.exportAuditLogs(params);
+      const blob = new Blob([blobData], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'Aura_Laundry_System_Logs.csv');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('CSV Export failed:', err);
+      alert('Failed to export CSV. Please check permissions.');
+    }
+  };
+
+  // Helper for formatting date timestamp into local EAT string
+  const formatTimestamp = (dateStr) => {
+    if (!dateStr) return { date: '-', time: '-' };
+    const d = new Date(dateStr);
+    const dateFormatted = d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+    const timeFormatted = d.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }) + ' EAT';
+
+    return { date: dateFormatted, time: timeFormatted };
+  };
+
+  // Helper for rendering user initials or icons
+  const getUserAvatar = (log) => {
+    if (log.role === 'Bot') {
+      return (
+        <div className="w-8 h-8 rounded-full bg-surface-variant text-on-surface-variant flex items-center justify-center font-label-sm">
+          <span className="material-symbols-outlined text-[16px]">smart_toy</span>
+        </div>
+      );
+    }
+
+    if (log.role === 'Unauthenticated' || !log.user) {
+      return (
+        <div className="w-8 h-8 rounded-full bg-surface-variant text-on-surface-variant flex items-center justify-center font-label-sm">
+          ?
+        </div>
+      );
+    }
+
+    const name = log.userName || 'User';
+    const initials = name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .substring(0, 2)
+      .toUpperCase();
+
+    const bgClass =
+      log.role === 'Admin'
+        ? 'bg-primary-container text-on-primary-container'
+        : log.role === 'Support'
+          ? 'bg-tertiary-container text-on-tertiary-container'
+          : 'bg-secondary-container text-on-secondary-container';
+
+    return (
+      <div className={`w-8 h-8 rounded-full ${bgClass} flex items-center justify-center font-label-sm font-semibold`}>
+        {initials}
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col w-full gap-stack-gap-lg">
@@ -129,26 +232,47 @@ export default function AdminUserLogs() {
         <div className="bg-surface-container-lowest p-4 rounded-xl shadow-xs border border-surface-container/40 flex flex-wrap items-center gap-4">
           <span className="font-label-sm text-on-surface-variant">Filter Status:</span>
           <button
-            onClick={() => setStatusFilter('All')}
+            onClick={() => handleStatusFilter('All')}
             className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer ${statusFilter === 'All' ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface'
               }`}
           >
             All
           </button>
           <button
-            onClick={() => setStatusFilter('Success')}
+            onClick={() => handleStatusFilter('Success')}
             className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer ${statusFilter === 'Success' ? 'bg-emerald-600 text-white' : 'bg-surface-container text-on-surface'
               }`}
           >
             Success Only
           </button>
           <button
-            onClick={() => setStatusFilter('Failed')}
+            onClick={() => handleStatusFilter('Failed')}
             className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer ${statusFilter === 'Failed' ? 'bg-rose-600 text-white' : 'bg-surface-container text-on-surface'
               }`}
           >
             Failed Only
           </button>
+
+          <span className="font-label-sm text-on-surface-variant ml-4">Category:</span>
+          <select
+            value={categoryFilter}
+            onChange={(e) => {
+              setCategoryFilter(e.target.value);
+              setPage(1);
+            }}
+            className="px-3 py-1 rounded-lg text-xs font-semibold bg-surface-container text-on-surface outline-none cursor-pointer"
+          >
+            <option value="All">All Categories</option>
+            <option value="Authentication">Authentication</option>
+            <option value="User Management">User Management</option>
+            <option value="Order">Order</option>
+            <option value="Payment">Payment</option>
+            <option value="Provider">Provider</option>
+            <option value="Driver">Driver</option>
+            <option value="System">System</option>
+            <option value="Security">Security</option>
+            <option value="Backup">Backup</option>
+          </select>
         </div>
       )}
 
@@ -161,16 +285,16 @@ export default function AdminUserLogs() {
             <span className="font-label-sm text-on-surface-variant uppercase tracking-wider">Total Events Today</span>
             <span className="material-symbols-outlined text-primary">data_usage</span>
           </div>
-          <div className="font-headline-lg text-on-surface">1,248</div>
+          <div className="font-headline-lg text-on-surface">{metrics.totalEventsToday.toLocaleString()}</div>
           <div className="flex items-center gap-1 text-secondary">
             <span className="material-symbols-outlined text-[16px]">trending_up</span>
-            <span className="font-body-sm">+12% vs yesterday</span>
+            <span className="font-body-sm">Live MongoDB count</span>
           </div>
         </div>
 
         {/* Failed Login Attempts */}
         <div
-          onClick={() => setStatusFilter(statusFilter === 'Failed' ? 'All' : 'Failed')}
+          onClick={() => handleStatusFilter(statusFilter === 'Failed' ? 'All' : 'Failed')}
           className="bg-surface-container-lowest p-6 rounded-xl shadow-xs border border-surface-container/40 flex flex-col gap-2 relative overflow-hidden group cursor-pointer hover:border-rose-400 transition-colors"
         >
           <div className="absolute -right-4 -top-4 w-24 h-24 bg-error/5 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700 pointer-events-none" />
@@ -178,7 +302,7 @@ export default function AdminUserLogs() {
             <span className="font-label-sm text-on-surface-variant uppercase tracking-wider">Failed Login Attempts</span>
             <span className="material-symbols-outlined text-error">gpp_bad</span>
           </div>
-          <div className="font-headline-lg text-on-surface">24</div>
+          <div className="font-headline-lg text-on-surface">{metrics.failedLoginAttempts}</div>
           <div className="flex items-center gap-1 text-on-surface-variant">
             <span className="font-body-sm">Last 24 hours</span>
           </div>
@@ -191,7 +315,7 @@ export default function AdminUserLogs() {
             <span className="font-label-sm text-on-surface-variant uppercase tracking-wider">Critical Actions</span>
             <span className="material-symbols-outlined text-secondary">warning</span>
           </div>
-          <div className="font-headline-lg text-on-surface">8</div>
+          <div className="font-headline-lg text-on-surface">{metrics.criticalActions}</div>
           <div className="flex items-center gap-1 text-on-surface-variant">
             <span className="font-body-sm">Requires review</span>
           </div>
@@ -237,8 +361,8 @@ export default function AdminUserLogs() {
           <div className="flex items-center gap-3">
             <div className="flex items-center bg-surface-container rounded-lg p-1">
               <button
-                onClick={() => setTimeRange('Today')}
-                className={`px-3 py-1.5 rounded-md font-label-sm transition-colors cursor-pointer ${timeRange === 'Today'
+                onClick={() => handleTimeRangeFilter('Today')}
+                className={`px-3 py-1.5 rounded-md font-label-sm transition-colors cursor-pointer ${timeRange === 'Today' && !selectedDate
                     ? 'bg-surface-container-lowest shadow-xs text-on-surface'
                     : 'hover:bg-surface-container-high text-on-surface-variant'
                   }`}
@@ -246,8 +370,8 @@ export default function AdminUserLogs() {
                 Today
               </button>
               <button
-                onClick={() => setTimeRange('7d')}
-                className={`px-3 py-1.5 rounded-md font-label-sm transition-colors cursor-pointer ${timeRange === '7d'
+                onClick={() => handleTimeRangeFilter('7d')}
+                className={`px-3 py-1.5 rounded-md font-label-sm transition-colors cursor-pointer ${timeRange === '7d' && !selectedDate
                     ? 'bg-surface-container-lowest shadow-xs text-on-surface'
                     : 'hover:bg-surface-container-high text-on-surface-variant'
                   }`}
@@ -255,8 +379,8 @@ export default function AdminUserLogs() {
                 7d
               </button>
               <button
-                onClick={() => setTimeRange('30d')}
-                className={`px-3 py-1.5 rounded-md font-label-sm transition-colors cursor-pointer ${timeRange === '30d'
+                onClick={() => handleTimeRangeFilter('30d')}
+                className={`px-3 py-1.5 rounded-md font-label-sm transition-colors cursor-pointer ${timeRange === '30d' && !selectedDate
                     ? 'bg-surface-container-lowest shadow-xs text-on-surface'
                     : 'hover:bg-surface-container-high text-on-surface-variant'
                   }`}
@@ -272,15 +396,34 @@ export default function AdminUserLogs() {
               <input
                 type="date"
                 value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
+                onChange={handleDateChange}
                 className="bg-transparent font-body-sm text-on-surface outline-none pr-3 py-1.5 cursor-pointer"
               />
             </div>
           </div>
         </div>
 
+        {/* Loading / Error Banner */}
+        {error && (
+          <div className="p-4 bg-rose-50 border-b border-rose-200 text-rose-700 text-sm flex items-center justify-between">
+            <span>{error}</span>
+            <button onClick={fetchLogs} className="underline font-semibold cursor-pointer">
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Logs Table */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto min-h-[300px] relative">
+          {loading && (
+            <div className="absolute inset-0 bg-surface-container-lowest/70 backdrop-blur-xs flex items-center justify-center z-10">
+              <div className="flex items-center gap-3 font-body-md text-primary">
+                <span className="material-symbols-outlined animate-spin text-[28px]">sync</span>
+                Loading system audit logs...
+              </div>
+            </div>
+          )}
+
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-surface-container-low">
@@ -303,93 +446,121 @@ export default function AdminUserLogs() {
               </tr>
             </thead>
             <tbody className="align-top divide-y divide-surface-variant">
-              {filteredLogs.map((log) => (
-                <tr
-                  key={log.id}
-                  className={`hover:bg-surface-container-lowest/50 transition-colors group cursor-pointer ${log.isError ? 'bg-error-container/10' : ''
-                    }`}
-                >
-                  <td className="p-4">
-                    <div className="font-body-sm text-on-surface">{log.date}</div>
-                    <div className="font-label-sm text-on-surface-variant">{log.time}</div>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-8 h-8 rounded-full ${log.avatarBg} flex items-center justify-center font-label-sm`}
-                      >
-                        {log.icon ? (
-                          <span className="material-symbols-outlined text-[16px]">{log.icon}</span>
-                        ) : (
-                          log.initials
-                        )}
-                      </div>
-                      <div>
-                        <div className="font-label-md text-on-surface">{log.user}</div>
-                        <div className="font-label-sm text-on-surface-variant">{log.role}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <div
-                      className={`font-body-sm font-medium ${log.isError ? 'text-error' : 'text-on-surface'}`}
-                    >
-                      {log.action}
-                    </div>
-                    <div className="font-label-sm text-on-surface-variant truncate max-w-xs">{log.details}</div>
-                  </td>
-                  <td className="p-4">
-                    <div className="font-body-sm text-on-surface font-mono text-xs bg-surface-container px-2 py-1 rounded w-fit">
-                      {log.ip}
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    {log.status === 'Success' ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary-container/20 text-on-secondary-container font-label-sm">
-                        <span className="w-1.5 h-1.5 rounded-full bg-secondary" /> Success
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-error-container/20 text-on-error-container font-label-sm">
-                        <span className="w-1.5 h-1.5 rounded-full bg-error" /> Failed
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-4 text-right">
-                    <button className="p-1.5 text-on-surface-variant hover:text-primary transition-colors opacity-0 group-hover:opacity-100 cursor-pointer">
-                      <span className="material-symbols-outlined text-[20px]">more_vert</span>
-                    </button>
+              {logs.length === 0 && !loading ? (
+                <tr>
+                  <td colSpan={6} className="p-12 text-center text-on-surface-variant font-body-md">
+                    No audit logs found matching your criteria.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                logs.map((log) => {
+                  const { date: formattedDate, time: formattedTime } = formatTimestamp(log.createdAt);
+                  const isError = log.status === 'Failed';
+
+                  return (
+                    <tr
+                      key={log._id || log.id}
+                      className={`hover:bg-surface-container-lowest/50 transition-colors group cursor-pointer ${isError ? 'bg-error-container/10' : ''
+                        }`}
+                    >
+                      <td className="p-4">
+                        <div className="font-body-sm text-on-surface">{formattedDate}</div>
+                        <div className="font-label-sm text-on-surface-variant">{formattedTime}</div>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-3">
+                          {getUserAvatar(log)}
+                          <div>
+                            <div className="font-label-md text-on-surface">{log.userName || 'Unknown User'}</div>
+                            <div className="font-label-sm text-on-surface-variant">{log.role || 'Unauthenticated'}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <div
+                          className={`font-body-sm font-medium ${isError ? 'text-error' : 'text-on-surface'}`}
+                        >
+                          {log.action}
+                        </div>
+                        <div className="font-label-sm text-on-surface-variant truncate max-w-xs">{log.details}</div>
+                      </td>
+                      <td className="p-4">
+                        <div className="font-body-sm text-on-surface font-mono text-xs bg-surface-container px-2 py-1 rounded w-fit">
+                          {log.ipAddress || 'Unknown'}
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        {log.status === 'Success' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary-container/20 text-on-secondary-container font-label-sm">
+                            <span className="w-1.5 h-1.5 rounded-full bg-secondary" /> Success
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-error-container/20 text-on-error-container font-label-sm">
+                            <span className="w-1.5 h-1.5 rounded-full bg-error" /> Failed
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-4 text-right">
+                        <button className="p-1.5 text-on-surface-variant hover:text-primary transition-colors opacity-0 group-hover:opacity-100 cursor-pointer">
+                          <span className="material-symbols-outlined text-[20px]">more_vert</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
 
-        {/* Pagination */}
+        {/* Dynamic MongoDB Pagination */}
         <div className="p-4 border-t border-surface-variant flex items-center justify-between bg-surface-container-lowest">
           <span className="font-body-sm text-on-surface-variant">
-            Showing 1-{filteredLogs.length} of 1,248 logs
+            Showing {logs.length > 0 ? (pagination.page - 1) * pagination.limit + 1 : 0}-
+            {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total.toLocaleString()} logs
           </span>
           <div className="flex items-center gap-2">
-            <button className="p-1 text-on-surface-variant hover:bg-surface-container rounded transition-colors disabled:opacity-50 cursor-pointer">
+            <button
+              onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+              disabled={!pagination.hasPreviousPage || loading}
+              className="p-1 text-on-surface-variant hover:bg-surface-container rounded transition-colors disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+            >
               <span className="material-symbols-outlined text-[20px]">chevron_left</span>
             </button>
             <div className="flex items-center gap-1">
-              <button className="w-8 h-8 rounded flex items-center justify-center font-label-sm bg-primary text-on-primary">
-                1
-              </button>
-              <button className="w-8 h-8 rounded flex items-center justify-center font-label-sm text-on-surface hover:bg-surface-container transition-colors cursor-pointer">
-                2
-              </button>
-              <button className="w-8 h-8 rounded flex items-center justify-center font-label-sm text-on-surface hover:bg-surface-container transition-colors cursor-pointer">
-                3
-              </button>
-              <span className="font-label-sm text-on-surface-variant px-1">...</span>
-              <button className="w-8 h-8 rounded flex items-center justify-center font-label-sm text-on-surface hover:bg-surface-container transition-colors cursor-pointer">
-                312
-              </button>
+              {Array.from({ length: Math.min(pagination.totalPages, 5) }, (_, i) => {
+                const pageNum = i + 1;
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setPage(pageNum)}
+                    className={`w-8 h-8 rounded flex items-center justify-center font-label-sm cursor-pointer transition-colors ${page === pageNum
+                        ? 'bg-primary text-on-primary font-bold'
+                        : 'text-on-surface hover:bg-surface-container'
+                      }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+              {pagination.totalPages > 5 && (
+                <>
+                  <span className="font-label-sm text-on-surface-variant px-1">...</span>
+                  <button
+                    onClick={() => setPage(pagination.totalPages)}
+                    className={`w-8 h-8 rounded flex items-center justify-center font-label-sm text-on-surface hover:bg-surface-container transition-colors cursor-pointer ${page === pagination.totalPages ? 'bg-primary text-on-primary font-bold' : ''
+                      }`}
+                  >
+                    {pagination.totalPages}
+                  </button>
+                </>
+              )}
             </div>
-            <button className="p-1 text-on-surface-variant hover:bg-surface-container rounded transition-colors cursor-pointer">
+            <button
+              onClick={() => setPage((prev) => Math.min(prev + 1, pagination.totalPages))}
+              disabled={!pagination.hasNextPage || loading}
+              className="p-1 text-on-surface-variant hover:bg-surface-container rounded transition-colors disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+            >
               <span className="material-symbols-outlined text-[20px]">chevron_right</span>
             </button>
           </div>

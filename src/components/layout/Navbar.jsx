@@ -14,12 +14,12 @@ export default function Navbar() {
           <Link to="/">Home</Link>
           <a href="#services">Services</a>
           <a href="#pricing">Pricing</a>
-          <Link to="/cleaners/dashboard" className="cleaners-link">
-            ⚡ cleaners Dashboard
+          <Link to="/login" className="cleaners-link">
+            ⚡ Cleaner Login
           </Link>
         </nav>
         <div className="navbar-actions">
-          <Link to="/cleaners/dashboard" className="btn-secondary">cleaners Portal</Link>
+          <Link to="/login" className="btn-secondary">Login</Link>
           <button className="btn-primary">Book Now</button>
         </div>
       </div>

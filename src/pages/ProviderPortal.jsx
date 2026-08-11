@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 
 import ProviderOrders from './ProviderOrders';
 import ProviderServices from './ProviderServices';
@@ -11,6 +12,9 @@ import ProviderSettings from './ProviderSettings';
 
 export default function ProviderPortal() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
   const initialTab = searchParams.get('tab') || 'dashboard';
   const [activeTab, setActiveTab] = useState(initialTab);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -24,6 +28,11 @@ export default function ProviderPortal() {
     setSearchParams({ tab: tabId });
     setIsMobileSidebarOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
   };
 
   const navItems = [
@@ -52,9 +61,13 @@ export default function ProviderPortal() {
 
       {/* Persistent Single Sidebar */}
       <aside className={`fixed left-0 top-0 h-full w-72 bg-[#f3f3f6] z-50 flex flex-col shadow-[1px_0_0_0_rgba(0,0,0,0.05)] transition-transform duration-300 ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-        <div className="px-8 py-6 flex items-center justify-end md:hidden">
+        <div className="px-8 py-6 flex items-center justify-between">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
+            <span className="material-symbols-outlined text-[#0052ff] text-2xl">local_laundry_service</span>
+            <span className="font-['Geist'] font-bold text-lg text-[#1a1c1e]">Aura Cleaners</span>
+          </div>
           <button
-            className="text-[#434656] p-1 rounded-lg hover:bg-[#e8e8ea]"
+            className="text-[#434656] p-1 rounded-lg hover:bg-[#e8e8ea] md:hidden"
             onClick={() => setIsMobileSidebarOpen(false)}
           >
             <span className="material-symbols-outlined">close</span>
@@ -104,6 +117,15 @@ export default function ProviderPortal() {
               </button>
             );
           })}
+
+          {/* Sidebar Logout Button */}
+          <button
+            onClick={handleLogout}
+            className="w-full mt-4 flex items-center px-4 py-3 rounded-xl transition-all gap-3 text-left font-['Geist'] text-sm font-medium cursor-pointer text-[#ba1a1a] hover:bg-[#ffdad6] hover:text-[#410002]"
+          >
+            <span className="material-symbols-outlined text-[22px]">logout</span>
+            <span>Logout</span>
+          </button>
         </nav>
       </aside>
 
@@ -125,7 +147,7 @@ export default function ProviderPortal() {
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4 sm:gap-6">
             <button
               onClick={() => alert('Notifications Panel: 3 unread order updates.')}
               className="relative p-2 text-[#434656] hover:bg-[#e8e8ea] rounded-full transition-colors cursor-pointer"
@@ -138,8 +160,10 @@ export default function ProviderPortal() {
               className="flex items-center gap-3 pl-4 border-l border-[#c3c5d9]/40 cursor-pointer hover:opacity-80 transition-opacity"
             >
               <div className="text-right hidden sm:block">
-                <p className="font-['Geist'] font-medium text-sm text-[#1a1c1e]">Mama Safi Cleaning</p>
-                <p className="font-['Geist'] text-xs text-[#434656]">cleaners Account</p>
+                <p className="font-['Geist'] font-medium text-sm text-[#1a1c1e]">
+                  {user?.fullName || user?.firstName || 'Cleaner Partner'}
+                </p>
+                <p className="font-['Geist'] text-xs text-[#434656]">{user?.email || 'cleaner Account'}</p>
               </div>
               <div className="w-10 h-10 rounded-full bg-[#003ec7] flex items-center justify-center shadow-sm">
                 <span className="material-symbols-outlined text-white text-[24px]">person</span>
@@ -147,6 +171,8 @@ export default function ProviderPortal() {
             </div>
           </div>
         </header>
+
+
 
         {/* Dynamic Section Content Body */}
         <main className="flex-1 bg-[#f9f9fc] p-6 md:p-10">

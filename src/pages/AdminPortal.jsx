@@ -80,8 +80,8 @@ export default function AdminPortal() {
                 key={item.id}
                 onClick={() => handleTabChange(item.id)}
                 className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 text-left font-label-md cursor-pointer ${isActive
-                    ? 'bg-primary text-on-primary shadow-lg'
-                    : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                  ? 'bg-primary text-on-primary shadow-lg'
+                  : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                   }`}
               >
                 <div className="flex items-center gap-3">

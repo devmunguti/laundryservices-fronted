@@ -92,8 +92,8 @@ export default function AdminSystemSettings() {
                 key={item.id}
                 onClick={() => setActiveSubTab(item.id)}
                 className={`w-full text-left flex items-center gap-3 px-4 py-3 rounded-lg transition-colors font-label-md cursor-pointer ${isActive
-                    ? 'text-primary bg-primary-fixed font-semibold'
-                    : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                  ? 'text-primary bg-primary-fixed font-semibold'
+                  : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
                   }`}
               >
                 <span className="material-symbols-outlined text-[20px]">{item.icon}</span>

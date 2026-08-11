@@ -1,55 +1,185 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { paymentApi } from '../api/paymentApi';
 
 export default function AdminPaymentRecords() {
   const [filter, setFilter] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [isProcessingPayouts, setIsProcessingPayouts] = useState(false);
   const [payoutSuccess, setPayoutSuccess] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState(null);
 
-  const [records, setRecords] = useState([
-    { id: '#ORD-9921', date: 'Oct 24, 14:30', cleaners: 'Sparkle Dry Cleaners', customer: 'Jane Wanjiku', amount: '2,500', comm: '375', status: 'Pending' },
-    { id: '#ORD-9920', date: 'Oct 24, 11:15', cleaners: 'Nairobi Fresh Wash', customer: 'David Omondi', amount: '1,800', comm: '270', status: 'Completed' },
-    { id: '#ORD-9919', date: 'Oct 23, 16:45', cleaners: 'Sparkle Dry Cleaners', customer: 'Mary Kamau', amount: '4,200', comm: '630', status: 'Pending' },
-    { id: '#ORD-9918', date: 'Oct 23, 09:00', cleaners: 'Westlands Laundry Hub', customer: 'Peter Njoroge', amount: '950', comm: '142.5', status: 'Completed' },
-    { id: '#ORD-9917', date: 'Oct 22, 18:20', cleaners: 'FreshPress Kilimani', customer: 'Alice Kamau', amount: '3,400', comm: '510', status: 'Completed' },
-    { id: '#ORD-9916', date: 'Oct 22, 15:10', cleaners: 'CleanCraft Karen', customer: 'Brian Otieno', amount: '5,100', comm: '765', status: 'Pending' },
-  ]);
+  // Modal State for viewing details
+  const [selectedPayment, setSelectedPayment] = useState(null);
 
-  const handleProcessPayouts = () => {
-    setIsProcessingPayouts(true);
-    setTimeout(() => {
-      setIsProcessingPayouts(false);
-      setPayoutSuccess(true);
-      // Update pending items to completed
-      setRecords(prev => prev.map(r => ({ ...r, status: 'Completed' })));
-      setTimeout(() => {
-        setPayoutSuccess(false);
-      }, 2500);
-    }, 1500);
-  };
-
-  const handleExportCSV = () => {
-    const csvContent = "data:text/csv;charset=utf-8,"
-      + ["Order ID,Date,cleaners,Customer,Amount (KES),Commission (KES),Payout Status"]
-        .concat(records.map(r => `${r.id},${r.date},${r.cleaners},${r.customer},${r.amount},${r.comm},${r.status}`))
-        .join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "Aura_Laundry_Payment_Records.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const filteredRecords = records.filter(r => {
-    const matchesFilter = filter === 'All' || r.status === filter;
-    const matchesSearch = r.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.cleaners.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.customer.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesFilter && matchesSearch;
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPreviousPage: false
   });
+
+  // Financial Metrics State
+  const [metrics, setMetrics] = useState({
+    totalRevenue: 0,
+    totalCommissions: 0,
+    pendingCommissionPayouts: 0,
+    pendingCount: 0
+  });
+
+  // Table Data & Loading/Error States
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Debounce search input (300ms)
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
+
+  // Reset page when filter changes
+  const handleFilterChange = (newFilter) => {
+    setFilter(newFilter);
+    setPage(1);
+  };
+
+  // Fetch Financial Metrics from MongoDB API
+  const fetchMetrics = async () => {
+    try {
+      const res = await paymentApi.getPaymentMetrics();
+      if (res.success && res.data) {
+        setMetrics(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch payment metrics:', err);
+    }
+  };
+
+  // Fetch Payment Ledger from MongoDB API
+  const fetchRecords = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const params = {
+        page,
+        limit,
+        search: debouncedSearch,
+        payoutStatus: filter !== 'All' ? filter : undefined
+      };
+
+      const res = await paymentApi.getPaymentRecords(params);
+      if (res.success && res.data) {
+        setRecords(res.data.payments || []);
+        if (res.data.pagination) {
+          setPagination(res.data.pagination);
+        }
+      } else {
+        setError(res.message || 'Failed to load payment records.');
+      }
+    } catch (err) {
+      console.error('Error fetching payment records:', err);
+      setError(err.response?.data?.message || err.message || 'Error connecting to server.');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, limit, debouncedSearch, filter]);
+
+  useEffect(() => {
+    fetchMetrics();
+  }, []);
+
+  useEffect(() => {
+    fetchRecords();
+  }, [fetchRecords]);
+
+  // Bulk Process Payouts Handler
+  const handleProcessPayouts = async () => {
+    try {
+      setIsProcessingPayouts(true);
+      const res = await paymentApi.processBulkPayouts();
+
+      if (res.success) {
+        setPayoutSuccess(true);
+        await Promise.all([fetchRecords(), fetchMetrics()]);
+        setTimeout(() => {
+          setPayoutSuccess(false);
+        }, 2500);
+      } else {
+        alert(res.message || 'Failed to process bulk payouts.');
+      }
+    } catch (err) {
+      console.error('Error processing bulk payouts:', err);
+      alert(err.response?.data?.message || 'Error processing payouts.');
+    } finally {
+      setIsProcessingPayouts(false);
+    }
+  };
+
+  // Settle Individual Payout Handler
+  const handleSettlePayout = async (recordId, orderId) => {
+    try {
+      const res = await paymentApi.settlePayout(recordId);
+      if (res.success) {
+        setActiveMenuId(null);
+        await Promise.all([fetchRecords(), fetchMetrics()]);
+      } else {
+        alert(res.message || `Failed to settle payout for ${orderId}`);
+      }
+    } catch (err) {
+      console.error('Error settling payout:', err);
+      alert(err.response?.data?.message || 'Failed to settle payout.');
+    }
+  };
+
+  // CSV Export Handler
+  const handleExportCSV = async () => {
+    try {
+      const params = {
+        search: debouncedSearch,
+        payoutStatus: filter !== 'All' ? filter : undefined
+      };
+
+      const blobData = await paymentApi.exportPaymentRecords(params);
+      const blob = new Blob([blobData], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'Aura_Laundry_Payment_Records.csv');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export CSV failed:', err);
+      alert('Failed to export CSV report.');
+    }
+  };
+
+  // Helper for formatting date strings
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric'
+    }) + `, ${d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+  };
+
+  // Helper for formatting KES currency
+  const formatCurrency = (val) => {
+    const num = Number(val) || 0;
+    return num.toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  };
 
   return (
     <div className="flex flex-col w-full gap-stack-gap-lg">
@@ -112,11 +242,11 @@ export default function AdminPaymentRecords() {
               </div>
               <span className="font-label-md text-on-surface-variant uppercase tracking-wider">Total Revenue</span>
             </div>
-            <span className="bg-primary/10 text-primary font-label-sm py-1 px-2 rounded-full">+12.5%</span>
+            <span className="bg-primary/10 text-primary font-label-sm py-1 px-2 rounded-full">Live MongoDB</span>
           </div>
           <div className="relative z-10">
-            <div className="font-headline-xl text-on-surface mb-1">KES 1,245,000</div>
-            <p className="font-body-sm text-on-surface-variant">Gross volume processed this month</p>
+            <div className="font-headline-xl text-on-surface mb-1">KES {formatCurrency(metrics.totalRevenue)}</div>
+            <p className="font-body-sm text-on-surface-variant">Gross volume processed on platform</p>
           </div>
         </div>
 
@@ -130,11 +260,11 @@ export default function AdminPaymentRecords() {
               </div>
               <span className="font-label-md text-on-surface-variant uppercase tracking-wider">Commissions</span>
             </div>
-            <span className="bg-secondary/10 text-secondary font-label-sm py-1 px-2 rounded-full">+8.2%</span>
+            <span className="bg-secondary/10 text-secondary font-label-sm py-1 px-2 rounded-full">Platform Net</span>
           </div>
           <div className="relative z-10">
-            <div className="font-headline-xl text-on-surface mb-1">KES 186,750</div>
-            <p className="font-body-sm text-on-surface-variant">Total platform earnings (15% avg)</p>
+            <div className="font-headline-xl text-on-surface mb-1">KES {formatCurrency(metrics.totalCommissions)}</div>
+            <p className="font-body-sm text-on-surface-variant">Total platform earnings</p>
           </div>
         </div>
 
@@ -153,12 +283,12 @@ export default function AdminPaymentRecords() {
           </div>
           <div className="relative z-10">
             <div className="font-headline-xl text-on-surface mb-1">
-              {records.some(r => r.status === 'Pending') ? 'KES 425,000' : 'KES 0'}
+              KES {formatCurrency(metrics.pendingCommissionPayouts)}
             </div>
             <p className="font-body-sm text-error/80">
-              {records.some(r => r.status === 'Pending')
-                ? 'Outstanding commissions to collect from 12 cleanerss'
-                : 'All cleaners payouts settled'}
+              {metrics.pendingCommissionPayouts > 0
+                ? `Outstanding payouts for ${metrics.pendingCount || 'pending'} transaction(s)`
+                : 'All cleaner payouts settled'}
             </p>
           </div>
         </div>
@@ -168,7 +298,7 @@ export default function AdminPaymentRecords() {
       <div className="flex flex-col sm:flex-row gap-stack-gap-sm items-center justify-between bg-surface-container-lowest p-2 rounded-xl shadow-xs border border-surface-container/40">
         <div className="flex gap-2 w-full sm:w-auto">
           <button
-            onClick={() => setFilter('All')}
+            onClick={() => handleFilterChange('All')}
             className={`px-4 py-2 rounded-lg font-label-md transition-colors cursor-pointer ${filter === 'All'
                 ? 'bg-surface-container text-on-surface font-semibold'
                 : 'text-on-surface-variant hover:bg-surface-container-low'
@@ -177,7 +307,7 @@ export default function AdminPaymentRecords() {
             All
           </button>
           <button
-            onClick={() => setFilter('Pending')}
+            onClick={() => handleFilterChange('Pending')}
             className={`px-4 py-2 rounded-lg font-label-md transition-colors cursor-pointer ${filter === 'Pending'
                 ? 'bg-error-container/30 text-error font-semibold'
                 : 'text-on-surface-variant hover:bg-surface-container-low'
@@ -186,7 +316,7 @@ export default function AdminPaymentRecords() {
             Pending
           </button>
           <button
-            onClick={() => setFilter('Completed')}
+            onClick={() => handleFilterChange('Completed')}
             className={`px-4 py-2 rounded-lg font-label-md transition-colors cursor-pointer ${filter === 'Completed'
                 ? 'bg-primary-container/20 text-primary font-semibold'
                 : 'text-on-surface-variant hover:bg-surface-container-low'
@@ -202,7 +332,7 @@ export default function AdminPaymentRecords() {
           </span>
           <input
             type="text"
-            placeholder="Search Order ID..."
+            placeholder="Search Order ID, Cleaner, Customer..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-surface-container-low rounded-lg py-2 pl-10 pr-4 font-body-sm text-on-surface outline-none focus:bg-surface-container-highest transition-colors"
@@ -210,111 +340,221 @@ export default function AdminPaymentRecords() {
         </div>
       </div>
 
+      {/* Error State Banner */}
+      {error && (
+        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-700 text-sm flex items-center justify-between rounded-xl">
+          <span>{error}</span>
+          <button onClick={fetchRecords} className="underline font-semibold cursor-pointer">
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Ledger Table */}
-      <div className="bg-surface-container-lowest rounded-xl shadow-xs overflow-hidden border border-surface-container/40">
+      <div className="bg-surface-container-lowest rounded-xl shadow-xs overflow-hidden border border-surface-container/40 relative min-h-[300px]">
+        {loading && (
+          <div className="absolute inset-0 bg-surface-container-lowest/70 backdrop-blur-xs flex items-center justify-center z-10">
+            <div className="flex items-center gap-3 font-body-md text-primary">
+              <span className="material-symbols-outlined animate-spin text-[28px]">sync</span>
+              Loading payment ledger from MongoDB...
+            </div>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-surface-container-low">
                 <th className="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider">Order ID</th>
                 <th className="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider">Date</th>
-                <th className="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider">cleaners</th>
+                <th className="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider">Cleaners</th>
                 <th className="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider">Customer</th>
                 <th className="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider text-right">Amount (KES)</th>
+                <th className="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider text-center">Rate</th>
                 <th className="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider text-right">Comm. (KES)</th>
                 <th className="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider text-center">Payout Status</th>
                 <th className="px-6 py-4 font-label-sm text-on-surface-variant uppercase tracking-wider text-center">Action</th>
               </tr>
             </thead>
             <tbody className="font-body-sm text-on-surface">
-              {filteredRecords.map((row) => (
-                <tr
-                  key={row.id}
-                  className="hover:bg-surface-container-low/50 transition-colors group cursor-pointer border-b border-surface-container-low/50 last:border-0"
-                >
-                  <td className="px-6 py-4 font-label-md font-semibold">{row.id}</td>
-                  <td className="px-6 py-4 text-on-surface-variant">{row.date}</td>
-                  <td className="px-6 py-4 font-medium">{row.cleaners}</td>
-                  <td className="px-6 py-4">{row.customer}</td>
-                  <td className="px-6 py-4 text-right font-label-md font-semibold">{row.amount}</td>
-                  <td className="px-6 py-4 text-right text-secondary font-label-md font-semibold">{row.comm}</td>
-                  <td className="px-6 py-4 text-center">
-                    {row.status === 'Pending' ? (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-error-container/20 text-error font-label-sm gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-error" /> Pending
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-primary-container/20 text-primary font-label-sm gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Completed
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-center relative">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveMenuId(activeMenuId === row.id ? null : row.id);
-                      }}
-                      className="p-1 rounded hover:bg-surface-container text-on-surface-variant group-hover:text-primary transition-colors cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined text-[20px]">more_vert</span>
-                    </button>
-
-                    {activeMenuId === row.id && (
-                      <div className="absolute right-6 top-12 bg-surface-container-lowest border border-surface-container rounded-lg shadow-lg py-1 w-36 z-30 text-left font-label-sm">
-                        <button
-                          onClick={() => {
-                            alert(`View receipt for ${row.id}`);
-                            setActiveMenuId(null);
-                          }}
-                          className="w-full px-3 py-1.5 hover:bg-surface-container text-on-surface text-xs flex items-center gap-2 cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">visibility</span> View Details
-                        </button>
-                        {row.status === 'Pending' && (
-                          <button
-                            onClick={() => {
-                              setRecords(prev => prev.map(r => r.id === row.id ? { ...r, status: 'Completed' } : r));
-                              setActiveMenuId(null);
-                            }}
-                            className="w-full px-3 py-1.5 hover:bg-surface-container text-emerald-700 text-xs flex items-center gap-2 cursor-pointer"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">check_circle</span> Settle Payout
-                          </button>
-                        )}
-                      </div>
-                    )}
+              {records.length === 0 && !loading ? (
+                <tr>
+                  <td colSpan={9} className="p-12 text-center text-on-surface-variant font-body-md">
+                    No payment records found matching your filter criteria.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                records.map((row) => (
+                  <tr
+                    key={row._id || row.id}
+                    className="hover:bg-surface-container-low/50 transition-colors group cursor-pointer border-b border-surface-container-low/50 last:border-0"
+                  >
+                    <td className="px-6 py-4 font-label-md font-semibold">{row.id}</td>
+                    <td className="px-6 py-4 text-on-surface-variant">{formatDate(row.date)}</td>
+                    <td className="px-6 py-4 font-medium">{row.cleaners}</td>
+                    <td className="px-6 py-4">{row.customer}</td>
+                    <td className="px-6 py-4 text-right font-label-md font-semibold">{formatCurrency(row.amount)}</td>
+                    <td className="px-6 py-4 text-center font-mono text-xs">
+                      <span className="bg-surface-container px-2 py-1 rounded-md text-on-surface-variant font-semibold">
+                        {row.commissionRate ? `${row.commissionRate}%` : '15%'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right text-secondary font-label-md font-semibold">{formatCurrency(row.comm)}</td>
+                    <td className="px-6 py-4 text-center">
+                      {row.status === 'Pending' ? (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-error-container/20 text-error font-label-sm gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-error" /> Pending
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-primary-container/20 text-primary font-label-sm gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Completed
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-center relative">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveMenuId(activeMenuId === row.id ? null : row.id);
+                        }}
+                        className="p-1 rounded hover:bg-surface-container text-on-surface-variant group-hover:text-primary transition-colors cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">more_vert</span>
+                      </button>
+
+                      {activeMenuId === row.id && (
+                        <div className="absolute right-6 top-12 bg-surface-container-lowest border border-surface-container rounded-lg shadow-lg py-1 w-36 z-30 text-left font-label-sm">
+                          <button
+                            onClick={() => {
+                              setSelectedPayment(row);
+                              setActiveMenuId(null);
+                            }}
+                            className="w-full px-3 py-1.5 hover:bg-surface-container text-on-surface text-xs flex items-center gap-2 cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">visibility</span> View Details
+                          </button>
+                          {row.status === 'Pending' && (
+                            <button
+                              onClick={() => handleSettlePayout(row._id, row.id)}
+                              className="w-full px-3 py-1.5 hover:bg-surface-container text-emerald-700 text-xs flex items-center gap-2 cursor-pointer"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">check_circle</span> Settle Payout
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
 
-        {/* Pagination */}
+        {/* Dynamic Pagination */}
         <div className="px-6 py-4 border-t border-surface-container-low bg-surface-container-lowest flex items-center justify-between">
           <span className="font-body-sm text-on-surface-variant">
-            Showing 1 to {filteredRecords.length} of 245 entries
+            Showing {records.length > 0 ? (pagination.page - 1) * pagination.limit + 1 : 0} to{' '}
+            {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total.toLocaleString()} entries
           </span>
           <div className="flex gap-2">
-            <button className="p-2 rounded-lg hover:bg-surface-container text-on-surface-variant transition-colors disabled:opacity-50 cursor-pointer">
+            <button
+              onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+              disabled={!pagination.hasPreviousPage || loading}
+              className="p-2 rounded-lg hover:bg-surface-container text-on-surface-variant transition-colors disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+            >
               <span className="material-symbols-outlined text-[20px]">chevron_left</span>
             </button>
-            <button className="p-2 rounded-lg bg-primary-container text-on-primary-container font-label-md transition-colors w-8 h-8 flex items-center justify-center">
-              1
-            </button>
-            <button className="p-2 rounded-lg hover:bg-surface-container text-on-surface font-label-md transition-colors w-8 h-8 flex items-center justify-center cursor-pointer">
-              2
-            </button>
-            <button className="p-2 rounded-lg hover:bg-surface-container text-on-surface font-label-md transition-colors w-8 h-8 flex items-center justify-center cursor-pointer">
-              3
-            </button>
-            <button className="p-2 rounded-lg hover:bg-surface-container text-on-surface-variant transition-colors cursor-pointer">
+            <div className="flex gap-1">
+              {Array.from({ length: Math.min(pagination.totalPages, 5) }, (_, i) => {
+                const pageNum = i + 1;
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setPage(pageNum)}
+                    className={`w-8 h-8 rounded-lg font-label-md flex items-center justify-center transition-colors cursor-pointer ${page === pageNum
+                        ? 'bg-primary-container text-on-primary-container font-bold'
+                        : 'hover:bg-surface-container text-on-surface'
+                      }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => setPage((prev) => Math.min(prev + 1, pagination.totalPages))}
+              disabled={!pagination.hasNextPage || loading}
+              className="p-2 rounded-lg hover:bg-surface-container text-on-surface-variant transition-colors disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+            >
               <span className="material-symbols-outlined text-[20px]">chevron_right</span>
             </button>
           </div>
         </div>
       </div>
+
+      {/* Details View Modal */}
+      {selectedPayment && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-surface-container-lowest border border-surface-container rounded-2xl max-w-md w-full p-6 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between border-b border-surface-container pb-3 mb-4">
+              <h3 className="font-headline-sm text-on-surface">Payment Details</h3>
+              <button
+                onClick={() => setSelectedPayment(null)}
+                className="text-on-surface-variant hover:text-on-surface cursor-pointer"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="space-y-3 font-body-sm text-on-surface">
+              <div className="flex justify-between py-1 border-b border-surface-container-low">
+                <span className="text-on-surface-variant">Order Reference:</span>
+                <span className="font-semibold">{selectedPayment.id}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-surface-container-low">
+                <span className="text-on-surface-variant">Cleaner Partner:</span>
+                <span className="font-medium">{selectedPayment.cleaners}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-surface-container-low">
+                <span className="text-on-surface-variant">Customer:</span>
+                <span>{selectedPayment.customer}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-surface-container-low">
+                <span className="text-on-surface-variant">Gross Amount:</span>
+                <span className="font-bold text-primary">KES {formatCurrency(selectedPayment.amount)}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-surface-container-low">
+                <span className="text-on-surface-variant">Platform Commission (15%):</span>
+                <span className="font-semibold text-secondary">KES {formatCurrency(selectedPayment.comm)}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-surface-container-low">
+                <span className="text-on-surface-variant">Cleaner Payout Amount:</span>
+                <span className="font-bold">KES {formatCurrency(selectedPayment.providerPayoutAmount || selectedPayment.amount - selectedPayment.comm)}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-surface-container-low">
+                <span className="text-on-surface-variant">Payout Status:</span>
+                <span className={`font-semibold ${selectedPayment.status === 'Completed' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  {selectedPayment.status}
+                </span>
+              </div>
+              {selectedPayment.payoutReference && (
+                <div className="flex justify-between py-1 border-b border-surface-container-low">
+                  <span className="text-on-surface-variant">Payout Ref:</span>
+                  <span className="font-mono text-xs">{selectedPayment.payoutReference}</span>
+                </div>
+              )}
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setSelectedPayment(null)}
+                className="px-4 py-2 bg-primary text-on-primary rounded-lg font-label-md cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
