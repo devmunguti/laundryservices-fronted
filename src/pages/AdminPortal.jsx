@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSettings } from '../context/SettingsContext';
 
 import AdminOverview from './AdminOverview';
 import AdminProviderManagement from './AdminProviderManagement';
@@ -10,6 +11,7 @@ import AdminUserLogs from './AdminUserLogs';
 import AdminSystemSettings from './AdminSystemSettings';
 
 export default function AdminPortal() {
+  const { settings } = useSettings();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') || 'overview';
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -52,17 +54,22 @@ export default function AdminPortal() {
         {/* Brand Header */}
         <div className="h-16 px-gutter-desktop flex items-center justify-between border-b border-surface-container">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => handleTabChange('overview')}>
-            <img
-              alt="Aura Laundry Logo"
-              className="h-8 w-auto object-contain"
-              src="https://lh3.googleusercontent.com/aida/AP1WRLta25wmxF0oJh9s5exB3Ml7fMmY_esGvwYxcKOGZXWLBepx1CHhANhjBXqPbbNnTNm7MIbDRR3Ab1Vj9ov3fBDnLO5WMZag_dDQfQOL4Trb-Yxm9ddXDK3GQcZCyhVXI96L6P4dWgbcfnOjDNoJfkSUIj_KSAzA2jUTk3ZD3csi9B1PcK3Z8tfcLndPQbkxp7gOwemuQOl7rko664DBJXqzta58JFFYVZgGIT-K6ed6EbOP4vs3Fde4xos"
-              onError={(e) => {
-                e.target.onerror = null;
-                e.target.style.display = 'none';
-              }}
-            />
-            <span className="font-headline-md text-primary tracking-tight">Aura Laundry</span>
+            {settings?.logoUrl ? (
+              <img
+                alt={settings.platformName || 'Logo'}
+                className="h-8 w-auto object-contain"
+                src={settings.logoUrl}
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.style.display = 'none';
+                }}
+              />
+            ) : (
+              <span className="material-symbols-outlined text-primary text-2xl">local_laundry_service</span>
+            )}
+            <span className="font-headline-md text-primary tracking-tight">{settings?.platformName || 'Aura Laundry'}</span>
           </div>
+
           <button
             className="lg:hidden text-on-surface-variant p-1 rounded-lg hover:bg-surface-container"
             onClick={() => setIsMobileSidebarOpen(false)}

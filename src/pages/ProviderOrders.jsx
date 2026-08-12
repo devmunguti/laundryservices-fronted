@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { orderApi } from '../api/orderApi';
 
 export default function cleanersOrders({ isStandalone = true }) {
   const navigate = useNavigate();
@@ -15,14 +16,17 @@ export default function cleanersOrders({ isStandalone = true }) {
   // Orders State
   const [orders, setOrders] = useState([]);
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch('http://localhost:5000/api/orders');
-      const json = await res.json();
-      if (json.success && json.data) {
-        const formatted = json.data.map((o) => ({
-          id: `#ORD-${o._id.slice(-6).toUpperCase()}`,
+      const res = await orderApi.getOrders({
+        search: searchQuery,
+        status: filterTab !== 'all' ? filterTab : undefined
+      });
+      if (res.success && res.data) {
+        const rawList = res.data.orders || [];
+        const formatted = rawList.map((o) => ({
+          id: o.orderRef || `#ORD-${o._id.slice(-6).toUpperCase()}`,
           rawId: o._id,
           customer: o.customer?.fullName || 'Guest Customer',
           avatarInitials: (o.customer?.fullName || 'GC').split(' ').map(n => n[0]).join('').slice(0, 2),
@@ -37,7 +41,7 @@ export default function cleanersOrders({ isStandalone = true }) {
           statusLabel: o.status || 'Pending',
           statusBg: o.status === 'Cancelled' ? 'bg-[#eeeef0] text-[#737688]' : 'bg-[#c2e8ff]/40 text-[#004d67]',
           statusDot: o.status === 'Cancelled' ? 'bg-[#737688]' : 'bg-[#006688]',
-          amount: `KES ${o.pricing?.grandTotal || o.totalAmount || 0}`
+          amount: `KES ${(o.pricing?.grandTotal || o.totalAmount || 0).toLocaleString()}`
         }));
         setOrders(formatted);
       }
@@ -46,27 +50,26 @@ export default function cleanersOrders({ isStandalone = true }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchQuery, filterTab]);
 
   useEffect(() => {
     fetchOrders();
-  }, []);
+  }, [fetchOrders]);
 
   const handleUpdateStatus = async (rawId, newMongoStatus) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/orders/${rawId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newMongoStatus })
-      });
-      const json = await res.json();
-      if (json.success) {
-        fetchOrders();
+      setUpdatingOrderId(rawId);
+      const res = await orderApi.updateOrderStatus(rawId, newMongoStatus);
+      if (res.success) {
+        await fetchOrders();
+      } else {
+        alert(res.message || 'Failed to update order status.');
       }
     } catch (err) {
-      console.error('Failed to update order status in MongoDB:', err);
+      alert(err.response?.data?.message || 'Error updating order status.');
+    } finally {
+      setUpdatingOrderId(null);
     }
-    setUpdatingOrderId(null);
   };
 
 

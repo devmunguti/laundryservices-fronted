@@ -1,64 +1,53 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useSettings } from '../context/SettingsContext';
+import { serviceApi } from '../api/serviceApi';
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const { settings } = useSettings();
 
   const [activeNav, setActiveNav] = useState('discover');
   const [searchQuery, setSearchQuery] = useState('');
-  const [location, setLocation] = useState('Brooklyn, NY');
+  const [location, setLocation] = useState('Nairobi, KE');
   const [favorites, setFavorites] = useState({});
 
-  const toggleFavorite = (providerId, e) => {
+  const [services, setServices] = useState([]);
+  const [loadingServices, setLoadingServices] = useState(true);
+  const [servicesError, setServicesError] = useState(null);
+
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        setLoadingServices(true);
+        const res = await serviceApi.getServices();
+        if (res.success && Array.isArray(res.data)) {
+          setServices(res.data);
+        } else {
+          setServicesError('Unable to load services catalog.');
+        }
+      } catch (err) {
+        console.error('Failed to load services:', err);
+        setServicesError('Failed to connect to backend service catalog.');
+      } finally {
+        setLoadingServices(false);
+      }
+    };
+    fetchServices();
+  }, []);
+
+  const toggleFavorite = (serviceId, e) => {
     e.stopPropagation();
     setFavorites((prev) => ({
       ...prev,
-      [providerId]: !prev[providerId],
+      [serviceId]: !prev[serviceId],
     }));
   };
 
-  const providers = [
-    {
-      id: 'freshfold',
-      name: 'FreshFold',
-      rating: '4.9',
-      reviews: '120',
-      logo: 'https://lh3.googleusercontent.com/aida-public/AB6AXuArqgiLuAB95DcQToe3SkuFtb58hN5izTtt-lRh5zFZCP5TJL8vnkMmKdHDm76bSYujgdIY-QxTWJzMxaPb6miten5hHoJH7tqB_-m1T4o13ZYDhKpgybCBi0KfKTng3TJ_p69_brALts8hQp8WobYH9wZFEE3ZsU7nlu0qHfffkIXaMiMVSS1b28NrNe1RVlOOpaWnwzTc0aN026SP9hMR4LIfKGOzHfcYyTulC9o3OV5ZRedRUSaIDQ',
-      tags: ['Wash & Fold', 'Dry Clean', 'Next Day'],
-      price: '$1.50',
-      unit: '/ lb',
-      checkoutState: {
-        serviceName: 'FreshFold Wash & Fold',
-        details: '1 Bag (approx. 5kg)',
-        servicePrice: 1200,
-        deliveryOption: 'Standard Campus Zone',
-        deliveryPrice: 200,
-        tillNumber: '555 123',
-      },
-    },
-    {
-      id: 'pristine',
-      name: 'Pristine Care',
-      rating: '4.8',
-      reviews: '85',
-      logo: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDRnIzBvNOz6zfE5stEleBYp7UYxvh0fZNs05dijsHV9KgndfaSuvFTJzlND5_uOQxX4S0wBJm1bzCyhu_BWolhypmsvWFpmwsJhujA6rCTW3cZUVWpx9EoNO-HOKS57qzffV7rjuna8i-PmMtmgq2_au3SS6spomVciMYKW_9jwKrwB-dn7cnsAPWHut6xNzzqoQ7Rp2YqKLN7YyQl-ieHP_lIbJc0G6mbCNnU-3D5z_MpnwP9FYgtNg',
-      tags: ['Eco-Friendly', 'Delicates'],
-      price: '$2.10',
-      unit: '/ lb',
-      checkoutState: {
-        serviceName: 'Pristine Eco Care',
-        details: 'Delicates & Organic Wash',
-        servicePrice: 1600,
-        deliveryOption: 'Express Eco Delivery',
-        deliveryPrice: 300,
-        tillNumber: '555 789',
-      },
-    },
-  ];
-
-  const filteredProviders = providers.filter((p) =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredServices = services.filter((s) =>
+    (s.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (s.category || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (s.description || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -208,83 +197,110 @@ export default function HomePage() {
             </div>
 
             <div className="grid grid-cols-12 gap-bento-gap">
-              {/* Provider Grid Left Column */}
+              {/* Service Grid Left Column */}
               <div className="col-span-12 lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-bento-gap">
-                {filteredProviders.map((provider) => (
-                  <div
-                    key={provider.id}
-                    onClick={() => navigate('/checkout', { state: provider.checkoutState })}
-                    className="bg-surface-container-lowest rounded-[16px] p-6 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between h-[280px] border border-transparent hover:border-primary/20"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center overflow-hidden shrink-0">
-                          <img
-                            className="w-full h-full object-cover"
-                            alt={provider.name}
-                            src={provider.logo}
-                          />
-                        </div>
-                        <div>
-                          <h3 className="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors font-medium">
-                            {provider.name}
-                          </h3>
-                          <div className="flex items-center gap-1 text-on-surface-variant">
-                            <span
-                              className="material-symbols-outlined text-amber-500 text-[16px]"
-                              style={{ fontVariationSettings: "'FILL' 1" }}
-                            >
-                              star
+                {loadingServices ? (
+                  <div className="col-span-full py-12 text-center text-primary flex items-center justify-center gap-2">
+                    <span className="material-symbols-outlined animate-spin text-[24px]">sync</span>
+                    Loading live laundry services catalog...
+                  </div>
+                ) : filteredServices.length === 0 ? (
+                  <div className="col-span-full py-12 text-center text-on-surface-variant font-body-md bg-surface-container-lowest rounded-2xl border border-surface-container/40">
+                    No active services found matching your search.
+                  </div>
+                ) : (
+                  filteredServices.map((service) => {
+                    const providerName = service.provider?.fullName || service.provider?.providerDetails?.businessName || 'Sparkle Partner';
+                    const providerTillNumber = service.provider?.providerDetails?.tillNumber || '8995354';
+                    const paymentChannelsCount = service.provider?.providerDetails?.paymentChannels?.length || 0;
+                    const hasChannelConfigured = Boolean(
+                      paymentChannelsCount > 0 ||
+                      service.provider?.providerDetails?.payoutPhoneNumber ||
+                      (service.provider?.providerDetails?.tillNumber && service.provider?.providerDetails?.tillNumber !== '8995354')
+                    );
+                    const deliveryFee = typeof service.deliveryFee === 'number' ? service.deliveryFee : 200;
+
+                    const checkoutState = {
+                      serviceId: service._id,
+                      serviceName: service.name,
+                      category: service.category,
+                      details: service.description || 'Standard professional laundry care.',
+                      servicePrice: service.basePrice || 0,
+                      pricingType: service.pricingType || 'per_kg',
+                      deliveryOption: deliveryFee === 0 ? 'Free Delivery' : 'Standard Pickup & Delivery',
+                      deliveryPrice: deliveryFee,
+                      tillNumber: providerTillNumber,
+                      hasChannelConfigured: hasChannelConfigured,
+                      providerName: providerName
+                    };
+
+                    return (
+                      <div
+                        key={service._id}
+                        onClick={() => navigate('/checkout', { state: checkoutState })}
+                        className="bg-surface-container-lowest rounded-[16px] p-6 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between h-[280px] border border-transparent hover:border-primary/20"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                              <span className="material-symbols-outlined text-primary text-[24px]">local_laundry_service</span>
+                            </div>
+                            <div>
+                              <h3 className="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors font-medium">
+                                {service.name}
+                              </h3>
+                              <p className="font-body-sm text-on-surface-variant text-xs font-medium">
+                                Partner: {providerName}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => toggleFavorite(service._id, e)}
+                            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container text-outline transition-colors"
+                            title="Favorite"
+                          >
+                            <span className={`material-symbols-outlined text-[20px] ${favorites[service._id] ? 'text-red-500' : ''}`}>
+                              {favorites[service._id] ? 'favorite' : 'favorite_border'}
                             </span>
-                            <span className="font-label-md text-label-md">
-                              {provider.rating} ({provider.reviews})
+                          </button>
+                        </div>
+
+                        <p className="font-body-sm text-on-surface-variant line-clamp-2 my-2">
+                          {service.description || 'Professional washing, drying, and folding service.'}
+                        </p>
+
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          <span className="px-3 py-1 bg-secondary-container/20 text-secondary rounded-md font-label-md text-label-md font-semibold">
+                            {service.category}
+                          </span>
+                          <span className="px-3 py-1 bg-surface-container rounded-md font-label-md text-label-md text-on-surface-variant">
+                            {service.pricingType?.replace('_', ' ')}
+                          </span>
+                        </div>
+
+                        <div className="mt-2 flex items-end justify-between border-t border-surface-container/30 pt-3">
+                          <div>
+                            <p className="font-body-sm text-body-sm text-on-surface-variant mb-0.5">
+                              Price
+                            </p>
+                            <p className="font-headline-md text-headline-md text-on-surface font-semibold">
+                              KES {service.basePrice?.toLocaleString()}{' '}
+                              <span className="font-body-sm text-body-sm font-normal text-on-surface-variant">
+                                / {service.pricingType === 'per_kg' ? 'kg' : service.pricingType === 'per_item' ? 'item' : 'order'}
+                              </span>
+                            </p>
+                          </div>
+                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary transition-colors">
+                            <span className="material-symbols-outlined text-primary group-hover:text-on-primary transition-colors">
+                              arrow_forward
                             </span>
                           </div>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={(e) => toggleFavorite(provider.id, e)}
-                        className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container text-outline transition-colors"
-                        title="Favorite"
-                      >
-                        <span className={`material-symbols-outlined text-[20px] ${favorites[provider.id] ? 'text-red-500' : ''}`}>
-                          {favorites[provider.id] ? 'favorite' : 'favorite_border'}
-                        </span>
-                      </button>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 mt-4">
-                      {provider.tags.map((tag, i) => (
-                        <span
-                          key={i}
-                          className="px-3 py-1 bg-surface-container rounded-md font-label-md text-label-md text-on-surface-variant"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-
-                    <div className="mt-6 flex items-end justify-between">
-                      <div>
-                        <p className="font-body-sm text-body-sm text-on-surface-variant mb-1">
-                          Est. Price
-                        </p>
-                        <p className="font-headline-md text-headline-md text-on-surface font-semibold">
-                          {provider.price}{' '}
-                          <span className="font-body-sm text-body-sm font-normal text-on-surface-variant">
-                            {provider.unit}
-                          </span>
-                        </p>
-                      </div>
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary transition-colors">
-                        <span className="material-symbols-outlined text-primary group-hover:text-on-primary transition-colors">
-                          arrow_forward
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                    );
+                  })
+                )}
               </div>
 
               {/* Promoted Section Right Column */}
@@ -335,10 +351,12 @@ export default function HomePage() {
 
           {/* Footer */}
           <footer className="w-full py-6 mt-16 text-center text-on-surface-variant font-body-sm text-body-sm border-t border-outline-variant/20">
-            <p>@2026 all rights reserved</p>
+            <p>© 2026 {settings?.platformName || 'Aura Laundry'}. All rights reserved.</p>
+            <p className="text-xs text-outline mt-1">Support: {settings?.supportEmail || 'support@auralaundry.co.ke'} | {settings?.supportPhone || '+254 700 000 000'}</p>
           </footer>
         </div>
       </main>
     </div>
   );
 }
+

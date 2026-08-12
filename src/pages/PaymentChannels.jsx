@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { paymentApi } from '../api/paymentApi';
 
 export default function PaymentChannels({ isStandalone = true }) {
   const navigate = useNavigate();
@@ -8,47 +9,8 @@ export default function PaymentChannels({ isStandalone = true }) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingChannel, setEditingChannel] = useState(null);
 
-  // Channels state
-  const [channels, setChannels] = useState([
-    {
-      id: 'mpesa-1',
-      type: 'mpesa',
-      title: 'M-Pesa',
-      subtitle: 'Paybill',
-      accountName: 'Main Business Paybill',
-      businessNo: '890123',
-      accountNo: 'MAMA-SAFI-01',
-      isDefault: true,
-      isVerified: true,
-      iconColor: '#00a859',
-      bgColor: 'bg-[#00a859]/10'
-    },
-    {
-      id: 'bank-1',
-      type: 'bank',
-      title: 'Equity Bank',
-      subtitle: 'Bank Account',
-      accountName: 'Mama Safi Laundries Ltd',
-      accountNo: '•••• •••• •••• 4910',
-      branch: 'Westlands Branch',
-      isDefault: false,
-      isVerified: true,
-      iconColor: '#003ec7',
-      bgColor: 'bg-[#003ec7]/10'
-    },
-    {
-      id: 'cash-1',
-      type: 'cash',
-      title: 'Cash on Delivery',
-      subtitle: 'Physical Cash',
-      accountName: 'Store Counter Cash Box',
-      instructions: 'Exact change collected by delivery driver upon delivery.',
-      isDefault: false,
-      isVerified: true,
-      iconColor: '#006688',
-      bgColor: 'bg-[#006688]/10'
-    }
-  ]);
+  const [channels, setChannels] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const [newChannel, setNewChannel] = useState({
     type: 'mpesa',
@@ -59,6 +21,29 @@ export default function PaymentChannels({ isStandalone = true }) {
     accountNo: ''
   });
 
+  const fetchChannels = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await paymentApi.getChannels();
+      if (res.success && res.data) {
+        setChannels(res.data.map(ch => ({
+          ...ch,
+          id: ch._id,
+          iconColor: ch.type === 'mpesa' ? '#00a859' : ch.type === 'bank' ? '#003ec7' : '#006688',
+          bgColor: ch.type === 'mpesa' ? 'bg-[#00a859]/10' : ch.type === 'bank' ? 'bg-[#003ec7]/10' : 'bg-[#006688]/10'
+        })));
+      }
+    } catch (err) {
+      console.error('Failed to fetch payment channels:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchChannels();
+  }, [fetchChannels]);
+
   const handleSetDefault = (id) => {
     setChannels(prev => prev.map(ch => ({
       ...ch,
@@ -66,31 +51,43 @@ export default function PaymentChannels({ isStandalone = true }) {
     })));
   };
 
-  const handleDelete = (id) => {
-    setChannels(prev => prev.filter(ch => ch.id !== id));
+  const handleDelete = async (id) => {
+    try {
+      const res = await paymentApi.deleteChannel(id);
+      if (res.success) {
+        await fetchChannels();
+      } else {
+        alert(res.message || 'Failed to delete channel');
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error deleting payment channel');
+    }
   };
 
-  const handleAddChannel = (e) => {
+  const handleAddChannel = async (e) => {
     e.preventDefault();
     if (!newChannel.accountName) return;
 
-    const created = {
-      id: `channel-${Date.now()}`,
-      type: newChannel.type,
-      title: newChannel.type === 'mpesa' ? 'M-Pesa Paybill' : newChannel.type === 'bank' ? 'Bank Account' : 'Cash Payment',
-      subtitle: newChannel.type === 'mpesa' ? 'Paybill' : 'Account',
-      accountName: newChannel.accountName,
-      businessNo: newChannel.businessNo || 'N/A',
-      accountNo: newChannel.accountNo || 'N/A',
-      isDefault: false,
-      isVerified: true,
-      iconColor: newChannel.type === 'mpesa' ? '#00a859' : '#003ec7',
-      bgColor: newChannel.type === 'mpesa' ? 'bg-[#00a859]/10' : 'bg-[#003ec7]/10'
-    };
+    try {
+      const res = await paymentApi.addChannel({
+        type: newChannel.type,
+        title: newChannel.type === 'mpesa' ? 'M-Pesa Paybill' : newChannel.type === 'bank' ? 'Bank Account' : 'Cash Payment',
+        subtitle: newChannel.type === 'mpesa' ? 'Paybill' : 'Account',
+        accountName: newChannel.accountName,
+        businessNo: newChannel.businessNo || '',
+        accountNo: newChannel.accountNo || ''
+      });
 
-    setChannels(prev => [...prev, created]);
-    setIsAddModalOpen(false);
-    setNewChannel({ type: 'mpesa', title: '', subtitle: '', accountName: '', businessNo: '', accountNo: '' });
+      if (res.success) {
+        await fetchChannels();
+        setIsAddModalOpen(false);
+        setNewChannel({ type: 'mpesa', title: '', subtitle: '', accountName: '', businessNo: '', accountNo: '' });
+      } else {
+        alert(res.message || 'Failed to add payment channel');
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error adding payment channel');
+    }
   };
 
   const mainContent = (

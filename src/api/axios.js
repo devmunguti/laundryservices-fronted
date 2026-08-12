@@ -10,4 +10,23 @@ const api = axios.create({
   },
 });
 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (
+      error.response &&
+      error.response.status === 503 &&
+      error.response.data?.code === 'MAINTENANCE_MODE'
+    ) {
+      window.dispatchEvent(
+        new CustomEvent('platform:maintenance', {
+          detail: error.response.data?.message || 'Platform is under maintenance.'
+        })
+      );
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default api;
+

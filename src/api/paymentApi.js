@@ -50,5 +50,68 @@ export const paymentApi = {
       responseType: 'blob'
     });
     return response.data;
+  },
+
+  /**
+   * Customer initiate M-Pesa or COD payment checkout
+   */
+  checkoutPayment: async (data) => {
+    const response = await api.post('/payments/checkout', data);
+    return response.data;
+  },
+
+  /**
+   * Customer confirm manual Till transaction code
+   */
+  confirmManualPayment: async (data) => {
+    const response = await api.post('/payments/confirm-manual', data);
+    return response.data;
+  },
+
+  /**
+   * Customer poll payment status
+   */
+  getPaymentStatus: async (paymentId) => {
+    const response = await api.get(`/payments/${paymentId}/status`);
+    return response.data;
+  },
+
+  /**
+   * Retry failed payment
+   */
+  retryPayment: async (paymentId, data) => {
+    const response = await api.post(`/payments/${paymentId}/retry`, data);
+    return response.data;
+  },
+
+  /**
+   * Provider Payout Destination & Channels API
+   */
+  getProviderPayments: async () => {
+    const response = await api.get('/payments/provider');
+    return response.data;
+  },
+
+  /**
+   * Update provider payout M-Pesa destination details
+   */
+  updateProviderPayoutSettings: async (data) => {
+    const response = await api.put('/payments/provider/payout-settings', data);
+    return response.data;
+  },
+
+  getChannels: async () => {
+    const response = await api.get('/payments/channels');
+    return response.data;
+  },
+
+  addChannel: async (data) => {
+    const response = await api.post('/payments/channels', data);
+    return response.data;
+  },
+
+  deleteChannel: async (id) => {
+    const response = await api.delete(`/payments/channels/${id}`);
+    return response.data;
   }
 };

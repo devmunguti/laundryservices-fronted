@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { paymentApi } from '../api/paymentApi';
+import { useSettings } from '../context/SettingsContext';
 
 export default function AdminPaymentRecords() {
+  const { settings } = useSettings();
   const [filter, setFilter] = useState('All');
+
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [isProcessingPayouts, setIsProcessingPayouts] = useState(false);
@@ -396,9 +399,10 @@ export default function AdminPaymentRecords() {
                     <td className="px-6 py-4 text-right font-label-md font-semibold">{formatCurrency(row.amount)}</td>
                     <td className="px-6 py-4 text-center font-mono text-xs">
                       <span className="bg-surface-container px-2 py-1 rounded-md text-on-surface-variant font-semibold">
-                        {row.commissionRate ? `${row.commissionRate}%` : '15%'}
+                        {row.commissionRate !== undefined && row.commissionRate !== null ? `${row.commissionRate}%` : `${settings?.commissionRate ?? 15}%`}
                       </span>
                     </td>
+
                     <td className="px-6 py-4 text-right text-secondary font-label-md font-semibold">{formatCurrency(row.comm)}</td>
                     <td className="px-6 py-4 text-center">
                       {row.status === 'Pending' ? (
@@ -524,9 +528,10 @@ export default function AdminPaymentRecords() {
                 <span className="font-bold text-primary">KES {formatCurrency(selectedPayment.amount)}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-surface-container-low">
-                <span className="text-on-surface-variant">Platform Commission (15%):</span>
-                <span className="font-semibold text-secondary">KES {formatCurrency(selectedPayment.comm)}</span>
+                <span className="text-on-surface-variant">Platform Commission ({selectedPayment.commissionRate ?? settings?.commissionRate ?? 15}%):</span>
+                <span className="font-semibold text-secondary">KES {formatCurrency(selectedPayment.comm ?? (selectedPayment.amount * ((selectedPayment.commissionRate ?? settings?.commissionRate ?? 15) / 100)))}</span>
               </div>
+
               <div className="flex justify-between py-1 border-b border-surface-container-low">
                 <span className="text-on-surface-variant">Cleaner Payout Amount:</span>
                 <span className="font-bold">KES {formatCurrency(selectedPayment.providerPayoutAmount || selectedPayment.amount - selectedPayment.comm)}</span>

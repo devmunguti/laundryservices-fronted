@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { useSettings } from '../context/SettingsContext';
 
 export default function PortalGateway() {
   const navigate = useNavigate();
   const { login, register } = useAuth();
+  const { settings } = useSettings();
+
 
   // Mode: 'provider' or 'admin'
   const [activePortal, setActivePortal] = useState('provider');
@@ -158,8 +161,9 @@ export default function PortalGateway() {
               </span>
             </div>
             <h1 className="font-headline-xl text-3xl font-bold text-on-background mb-2">
-              Aura Laundry Portal
+              {settings?.platformName || 'Aura Laundry'} Portal
             </h1>
+
             <p className="font-body-lg text-on-surface-variant max-w-lg mx-auto text-sm md:text-base">
               Sign in or register your account to manage cleaning services or access administrative controls.
             </p>

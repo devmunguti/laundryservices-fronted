@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { useSettings } from '../context/SettingsContext';
 
 import ProviderOrders from './ProviderOrders';
 import ProviderServices from './ProviderServices';
@@ -11,9 +12,11 @@ import ProviderProfile from './ProviderProfile';
 import ProviderSettings from './ProviderSettings';
 
 export default function ProviderPortal() {
+  const { settings } = useSettings();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+
 
   const initialTab = searchParams.get('tab') || 'dashboard';
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -63,9 +66,14 @@ export default function ProviderPortal() {
       <aside className={`fixed left-0 top-0 h-full w-72 bg-[#f3f3f6] z-50 flex flex-col shadow-[1px_0_0_0_rgba(0,0,0,0.05)] transition-transform duration-300 ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="px-8 py-6 flex items-center justify-between">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-            <span className="material-symbols-outlined text-[#0052ff] text-2xl">local_laundry_service</span>
-            <span className="font-['Geist'] font-bold text-lg text-[#1a1c1e]">Aura Cleaners</span>
+            {settings?.logoUrl ? (
+              <img src={settings.logoUrl} alt={settings.platformName} className="h-7 w-auto object-contain" />
+            ) : (
+              <span className="material-symbols-outlined text-[#0052ff] text-2xl">local_laundry_service</span>
+            )}
+            <span className="font-['Geist'] font-bold text-lg text-[#1a1c1e]">{settings?.platformName || 'Aura Laundry'}</span>
           </div>
+
           <button
             className="text-[#434656] p-1 rounded-lg hover:bg-[#e8e8ea] md:hidden"
             onClick={() => setIsMobileSidebarOpen(false)}

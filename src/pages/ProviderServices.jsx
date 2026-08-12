@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { serviceApi } from '../api/serviceApi';
 
 export default function cleanersServices({ isStandalone = true, onNavigateTab }) {
   const navigate = useNavigate();
@@ -12,68 +13,79 @@ export default function cleanersServices({ isStandalone = true, onNavigateTab })
   const [category, setCategory] = useState('Wash & Fold');
   const [pricingType, setPricingType] = useState('per_kg');
   const [basePrice, setBasePrice] = useState('');
+  const [deliveryFee, setDeliveryFee] = useState('200');
   const [description, setDescription] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const fetchServices = async () => {
+  const fetchServices = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch('http://localhost:5000/api/services');
-      const json = await res.json();
-      if (json.success && json.data) {
-        setServices(json.data);
+      const res = await serviceApi.getServices();
+      if (res.success && res.data) {
+        setServices(res.data);
       }
     } catch (err) {
       console.error('Failed to fetch services:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchServices();
-  }, []);
+  }, [fetchServices]);
 
   const handleCreateService = async (e) => {
     e.preventDefault();
     if (!name || !basePrice) return;
 
     try {
-      const res = await fetch('http://localhost:5000/api/services', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          category,
-          pricingType,
-          basePrice: parseFloat(basePrice),
-          description
-        })
+      setSubmitting(true);
+      const res = await serviceApi.createService({
+        name,
+        category,
+        pricingType,
+        basePrice: parseFloat(basePrice),
+        deliveryFee: parseFloat(deliveryFee || 0),
+        description
       });
-      const json = await res.json();
-      if (json.success) {
-        fetchServices();
+      if (res.success) {
+        await fetchServices();
         setIsAddModalOpen(false);
         setName('');
         setBasePrice('');
+        setDeliveryFee('200');
         setDescription('');
+      } else {
+        alert(res.message || 'Failed to create service.');
       }
     } catch (err) {
-      console.error('Failed to create service in MongoDB:', err);
+      alert(err.response?.data?.message || 'Error creating service.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggleStatus = async (id, currentStatus) => {
+    try {
+      const res = await serviceApi.toggleServiceStatus(id, !currentStatus);
+      if (res.success) {
+        await fetchServices();
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to toggle service status.');
     }
   };
 
   const handleDeleteService = async (id) => {
     if (!window.confirm('Are you sure you want to delete this service from catalog?')) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/services/${id}`, {
-        method: 'DELETE'
-      });
-      const json = await res.json();
-      if (json.success) {
-        fetchServices();
+      const res = await serviceApi.deleteService(id);
+      if (res.success) {
+        await fetchServices();
       }
     } catch (err) {
-      console.error('Failed to delete service:', err);
+      alert(err.response?.data?.message || 'Failed to delete service.');
     }
   };
 
@@ -92,31 +104,51 @@ export default function cleanersServices({ isStandalone = true, onNavigateTab })
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-stack-gap-md">
-        {services.map((svc) => (
-          <div key={svc._id} className="bg-surface-container-lowest p-6 rounded-2xl border border-surface-container/40 flex flex-col justify-between shadow-xs">
-            <div>
-              <div className="flex justify-between items-start mb-2">
-                <span className="font-label-sm uppercase px-3 py-1 bg-secondary-container/20 text-secondary rounded-full font-semibold">
-                  {svc.category}
-                </span>
-                <button
-                  onClick={() => handleDeleteService(svc._id)}
-                  className="text-on-surface-variant hover:text-error transition-colors p-1"
-                >
-                  <span className="material-symbols-outlined text-[20px]">delete</span>
-                </button>
+      {loading ? (
+        <div className="py-12 text-center text-primary flex justify-center items-center gap-2">
+          <span className="material-symbols-outlined animate-spin text-[24px]">sync</span>
+          Loading services catalog from MongoDB...
+        </div>
+      ) : services.length === 0 ? (
+        <div className="py-12 text-center text-on-surface-variant font-body-md bg-surface-container-lowest rounded-2xl border border-surface-container/40">
+          No services created yet. Click 'Add New Service' to create your first offering.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-stack-gap-md">
+          {services.map((svc) => (
+            <div key={svc._id} className="bg-surface-container-lowest p-6 rounded-2xl border border-surface-container/40 flex flex-col justify-between shadow-xs">
+              <div>
+                <div className="flex justify-between items-start mb-2">
+                  <span className="font-label-sm uppercase px-3 py-1 bg-secondary-container/20 text-secondary rounded-full font-semibold">
+                    {svc.category}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleToggleStatus(svc._id, svc.isActive)}
+                      className={`text-xs px-2.5 py-1 rounded-full font-semibold cursor-pointer ${svc.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-surface-container text-on-surface-variant'
+                        }`}
+                    >
+                      {svc.isActive ? 'Active' : 'Disabled'}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteService(svc._id)}
+                      className="text-on-surface-variant hover:text-error transition-colors p-1 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">delete</span>
+                    </button>
+                  </div>
+                </div>
+                <h3 className="font-headline-md text-on-surface mb-1">{svc.name}</h3>
+                <p className="font-body-sm text-on-surface-variant mb-4">{svc.description || 'Standard service offering.'}</p>
               </div>
-              <h3 className="font-headline-md text-on-surface mb-1">{svc.name}</h3>
-              <p className="font-body-sm text-on-surface-variant mb-4">{svc.description || 'Standard service offering.'}</p>
+              <div className="flex justify-between items-center pt-4 border-t border-surface-container/40">
+                <span className="font-headline-md text-primary">KES {svc.basePrice?.toLocaleString()}</span>
+                <span className="font-label-sm text-on-surface-variant">/ {svc.pricingType?.replace('_', ' ')}</span>
+              </div>
             </div>
-            <div className="flex justify-between items-center pt-4 border-t border-surface-container/40">
-              <span className="font-headline-md text-primary">KES {svc.basePrice}</span>
-              <span className="font-label-sm text-on-surface-variant">/ {svc.pricingType?.replace('_', ' ')}</span>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -150,6 +182,21 @@ export default function cleanersServices({ isStandalone = true, onNavigateTab })
                   <option value="Dry Cleaning">Dry Cleaning</option>
                   <option value="Ironing & Pressing">Ironing & Pressing</option>
                   <option value="Bedding & Linens">Bedding & Linens</option>
+                  <option value="Express Delivery">Express Delivery</option>
+                  <option value="Shoe Cleaning">Shoe Cleaning</option>
+                  <option value="Specialty Care">Specialty Care</option>
+                </select>
+              </div>
+              <div>
+                <label className="block font-label-sm text-on-surface mb-1">Pricing Model</label>
+                <select
+                  value={pricingType}
+                  onChange={(e) => setPricingType(e.target.value)}
+                  className="w-full bg-surface-container py-2.5 px-4 rounded-lg font-body-sm outline-none"
+                >
+                  <option value="per_kg">Per Kg</option>
+                  <option value="per_item">Per Item</option>
+                  <option value="flat">Flat Rate</option>
                 </select>
               </div>
               <div>
@@ -160,6 +207,17 @@ export default function cleanersServices({ isStandalone = true, onNavigateTab })
                   placeholder="150"
                   value={basePrice}
                   onChange={(e) => setBasePrice(e.target.value)}
+                  className="w-full bg-surface-container py-2.5 px-4 rounded-lg font-body-sm outline-none"
+                />
+              </div>
+              <div>
+                <label className="block font-label-sm text-on-surface mb-1">Pickup &amp; Delivery Fee (KES) — 0 for Free</label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="0 (Free) or 200"
+                  value={deliveryFee}
+                  onChange={(e) => setDeliveryFee(e.target.value)}
                   className="w-full bg-surface-container py-2.5 px-4 rounded-lg font-body-sm outline-none"
                 />
               </div>
@@ -176,8 +234,8 @@ export default function cleanersServices({ isStandalone = true, onNavigateTab })
                 <button type="button" onClick={() => setIsAddModalOpen(false)} className="px-4 py-2 rounded-lg font-label-md text-on-surface-variant">
                   Cancel
                 </button>
-                <button type="submit" className="px-5 py-2 rounded-lg font-label-md bg-primary text-on-primary">
-                  Save Service
+                <button type="submit" disabled={submitting} className="px-5 py-2 rounded-lg font-label-md bg-primary text-on-primary shadow-xs cursor-pointer disabled:opacity-50">
+                  {submitting ? 'Saving...' : 'Save Service'}
                 </button>
               </div>
             </form>
@@ -199,4 +257,3 @@ export default function cleanersServices({ isStandalone = true, onNavigateTab })
     </div>
   );
 }
-

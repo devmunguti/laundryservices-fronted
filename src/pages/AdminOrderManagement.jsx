@@ -1,71 +1,115 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { orderApi } from '../api/orderApi';
+import { providerApi } from '../api/providerApi';
 
 export default function AdminOrderManagement() {
   const [activeTab, setActiveTab] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Manual Order Form State
-  const [newCustomerName, setNewCustomerName] = useState('');
-  const [newCustomerPhone, setNewCustomerPhone] = useState('');
-  const [newcleaners, setNewcleaners] = useState('Sparkle Cleaners Ltd');
-  const [newServiceType, setNewServiceType] = useState('Everyday Wash & Fold');
-  const [newAmount, setNewAmount] = useState('1500');
+  // Assign Provider Modal State
+  const [assigningOrder, setAssigningOrder] = useState(null);
+  const [selectedProviderId, setSelectedProviderId] = useState('');
+  const [activeProviders, setActiveProviders] = useState([]);
+  const [assignSubmitting, setAssignSubmitting] = useState(false);
 
   const [orders, setOrders] = useState([]);
 
+  // Fetch active providers for assign modal dropdown
+  const fetchActiveProviders = async () => {
+    try {
+      const res = await providerApi.getProviders({ status: 'Active', limit: 50 });
+      if (res.success && res.data) {
+        setActiveProviders(res.data.providers || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch providers for assignment:', err);
+    }
+  };
+
   // Fetch real MongoDB orders from Express Backend
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch('http://localhost:5000/api/orders');
-      const json = await res.json();
-      if (json.success && json.data) {
-        const formattedOrders = json.data.map((o) => ({
+      setError(null);
+
+      const params = {
+        search: debouncedSearch,
+        status: activeTab !== 'All' ? activeTab : undefined
+      };
+
+      const res = await orderApi.getOrders(params);
+      if (res.success && res.data) {
+        const rawList = res.data.orders || [];
+        const formattedOrders = rawList.map((o) => ({
           id: o._id,
-          displayId: `#ORD-${o._id.slice(-6).toUpperCase()}`,
+          displayId: o.orderRef || `#ORD-${o._id.slice(-6).toUpperCase()}`,
           customer: o.customer?.fullName || 'Guest Customer',
           phone: o.customer?.phone || '+254 700 000 000',
           avatar: null,
           initials: (o.customer?.fullName || 'GC').split(' ').map(n => n[0]).join('').slice(0, 2),
           initialsBg: 'bg-primary-container text-on-primary-container',
-          cleaners: o.provider?.fullName || 'Sparkle Cleaners Ltd',
+          cleaners: o.provider?.providerDetails?.businessName || o.provider?.fullName || 'Unassigned Cleaner',
           serviceIcon: 'local_laundry_service',
           serviceType: o.items?.[0]?.name || 'Standard Laundry',
-          amount: `KES ${o.pricing?.grandTotal || o.totalAmount || 0}`,
+          amount: `KES ${(o.pricing?.grandTotal || o.totalAmount || 0).toLocaleString()}`,
           status: o.status || 'Pending',
           statusType: (o.status || 'Pending').toLowerCase().replace(' ', '_'),
         }));
         setOrders(formattedOrders);
+      } else {
+        setError(res.message || 'Failed to load orders.');
       }
     } catch (err) {
       console.error('Failed to fetch orders from MongoDB:', err);
+      setError(err.response?.data?.message || err.message || 'Error loading orders.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [debouncedSearch, activeTab]);
 
   useEffect(() => {
     fetchOrders();
-  }, []);
+    fetchActiveProviders();
+  }, [fetchOrders]);
 
   const handleUpdateStatus = async (orderId, newStatus) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/orders/${orderId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
-      });
-      const json = await res.json();
-      if (json.success) {
-        fetchOrders();
+      const res = await orderApi.updateOrderStatus(orderId, newStatus);
+      if (res.success) {
+        await fetchOrders();
+      } else {
+        alert(res.message || 'Failed to update order status.');
       }
     } catch (err) {
-      console.error('Failed to update status in MongoDB:', err);
+      alert(err.response?.data?.message || 'Error updating order status.');
     }
-    setActiveMenuId(null);
+  };
+
+  const handleAssignProviderSubmit = async (e) => {
+    e.preventDefault();
+    if (!assigningOrder || !selectedProviderId) return;
+
+    try {
+      setAssignSubmitting(true);
+      const res = await orderApi.assignProvider(assigningOrder.id, selectedProviderId);
+      if (res.success) {
+        alert(res.message || 'Provider assigned successfully!');
+        setAssigningOrder(null);
+        setSelectedProviderId('');
+        await fetchOrders();
+      } else {
+        alert(res.message || 'Failed to assign provider.');
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error assigning provider.');
+    } finally {
+      setAssignSubmitting(false);
+    }
   };
 
   const handleCreateOrderSubmit = async (e) => {
@@ -319,9 +363,24 @@ export default function AdminOrderManagement() {
                     </button>
 
                     {activeMenuId === o.id && (
-                      <div className="absolute right-6 top-10 bg-surface-container-lowest border border-surface-container rounded-lg shadow-lg py-1 w-40 z-30 text-left font-label-sm">
+                      <div className="absolute right-6 top-10 bg-surface-container-lowest border border-surface-container rounded-lg shadow-lg py-1 w-44 z-30 text-left font-label-sm">
                         <button
-                          onClick={() => handleUpdateStatus(o.id, 'Ready_For_Pickup')}
+                          onClick={() => {
+                            setAssigningOrder(o);
+                            setActiveMenuId(null);
+                          }}
+                          className="w-full px-3 py-1.5 hover:bg-surface-container text-primary text-xs flex items-center gap-2 cursor-pointer font-semibold"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">person_add</span> Assign Cleaner
+                        </button>
+                        <button
+                          onClick={() => handleUpdateStatus(o.id, 'In_Wash')}
+                          className="w-full px-3 py-1.5 hover:bg-surface-container text-on-surface text-xs flex items-center gap-2 cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">local_laundry_service</span> Start Wash
+                        </button>
+                        <button
+                          onClick={() => handleUpdateStatus(o.id, 'Ready_For_Delivery')}
                           className="w-full px-3 py-1.5 hover:bg-surface-container text-on-surface text-xs flex items-center gap-2 cursor-pointer"
                         >
                           <span className="material-symbols-outlined text-[16px]">check_circle</span> Mark Ready
@@ -338,7 +397,6 @@ export default function AdminOrderManagement() {
                 </tr>
               ))}
             </tbody>
-
           </table>
         </div>
 

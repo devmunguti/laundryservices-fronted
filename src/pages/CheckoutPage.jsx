@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { orderApi } from '../api/orderApi';
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ export default function CheckoutPage() {
 
   // Form states
   const [phone, setPhone] = useState('');
+  const [paymentStatusMsg, setPaymentStatusMsg] = useState('');
   const [stkLoading, setStkLoading] = useState(false);
   const [stkSuccess, setStkSuccess] = useState(false);
   const [stkError, setStkError] = useState('');
@@ -30,11 +32,70 @@ export default function CheckoutPage() {
   const [confirmSuccess, setConfirmSuccess] = useState(false);
   const [confirmError, setConfirmError] = useState('');
 
-  // Handle STK Push Request
-  const handleStkPush = (e) => {
+  const copyToClipboard = (text) => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  // Poll backend for PayHero payment status confirmation
+  const pollPaymentStatus = (paymentId) => {
+    let attempts = 0;
+    const maxAttempts = 150; // 5 minutes max polling (150 * 2s)
+
+    const interval = setInterval(async () => {
+      attempts++;
+      try {
+        const { paymentApi } = await import('../api/paymentApi');
+        const res = await paymentApi.getPaymentStatus(paymentId);
+
+        if (res.success && res.payment) {
+          const currentStatus = (res.payment.status || '').toLowerCase();
+          
+          if (currentStatus === 'paid') {
+            clearInterval(interval);
+            setStkLoading(false);
+            setStkSuccess(true);
+            setPaymentStatusMsg('Payment successful! Your order has been placed.');
+            setTimeout(() => {
+              navigate('/admin?tab=order-management');
+            }, 2000);
+          } else if (currentStatus === 'cancelled') {
+            clearInterval(interval);
+            setStkLoading(false);
+            setStkError('M-Pesa payment request was cancelled on your phone.');
+          } else if (currentStatus === 'expired') {
+            clearInterval(interval);
+            setStkLoading(false);
+            setStkError('The payment request expired. Please try initiating a new payment.');
+          } else if (currentStatus === 'failed') {
+            clearInterval(interval);
+            setStkLoading(false);
+            setStkError(res.payment.failureReason || 'M-Pesa payment could not be completed. Please try again.');
+          } else {
+            setPaymentStatusMsg('Waiting for M-Pesa confirmation... Please check your phone and complete the payment.');
+          }
+        }
+      } catch (err) {
+        console.error('Status poll error:', err);
+      }
+
+      if (attempts >= maxAttempts) {
+        clearInterval(interval);
+        setStkLoading(false);
+        setStkError('Payment confirmation timed out. If you completed payment, please check your order history.');
+      }
+    }, 2000);
+  };
+
+  // Handle STK Push / Checkout Request to backend
+  const handleStkPush = async (e) => {
     e.preventDefault();
     setStkError('');
     setStkSuccess(false);
+    setPaymentStatusMsg('');
 
     const cleanPhone = phone.trim().replace(/\s+/g, '');
     if (!cleanPhone || cleanPhone.length < 9) {
@@ -42,41 +103,119 @@ export default function CheckoutPage() {
       return;
     }
 
-    setStkLoading(true);
+    try {
+      setStkLoading(true);
 
-    // Simulate STK Push payment trigger call
-    setTimeout(() => {
+      const activeServiceId = orderData.serviceId || orderData._id;
+      if (!activeServiceId) {
+        setStkError('No valid MongoDB service selected. Please return to the services catalog.');
+        setStkLoading(false);
+        return;
+      }
+
+      // Step 1: Create Order in MongoDB using authoritative service ID
+      const orderRes = await orderApi.createOrder({
+        items: [
+          {
+            serviceId: activeServiceId,
+            quantity: 1
+          }
+        ],
+        pickupAddress: { street: 'Main Campus Gate A', city: 'Nairobi' },
+        deliveryAddress: { street: orderData.deliveryOption || 'Nairobi', city: 'Nairobi' }
+      });
+
+      if (!orderRes.success || !orderRes.data?.order?._id) {
+        setStkError(orderRes.message || 'Failed to create order.');
+        setStkLoading(false);
+        return;
+      }
+
+      const createdOrderId = orderRes.data.order._id;
+
+      // Step 2: Trigger PayHero STK Push via backend endpoint
+      const { paymentApi } = await import('../api/paymentApi');
+      const payRes = await paymentApi.checkoutPayment({
+        orderId: createdOrderId,
+        paymentMethod: 'mpesa',
+        phoneNumber: cleanPhone
+      });
+
+      if (payRes.success && payRes.data?.paymentId) {
+        setPaymentStatusMsg('Check your phone for the M-Pesa prompt and enter your PIN.');
+        // Poll for backend confirmation from PayHero callback
+        pollPaymentStatus(payRes.data.paymentId);
+      } else {
+        setStkError(payRes.message || 'Unable to send M-Pesa prompt.');
+        setStkLoading(false);
+      }
+    } catch (err) {
+      setStkError(err.response?.data?.message || 'Error processing payment checkout.');
       setStkLoading(false);
-      setStkSuccess(true);
-    }, 1500);
+    }
   };
 
-  // Handle Copy Till Number
-  const copyToClipboard = (text) => {
-    const rawTill = text.replace(/\s+/g, '');
-    navigator.clipboard.writeText(rawTill).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
-  // Handle Manual Confirmation
-  const handleConfirmPayment = (e) => {
+  // Handle Manual Confirmation via M-Pesa Till Transaction Code
+  const handleConfirmPayment = async (e) => {
     e.preventDefault();
     setConfirmError('');
     const code = transactionCode.trim().toUpperCase();
 
-    if (code.length < 8) {
-      setConfirmError('Please enter a valid M-Pesa transaction code (at least 8 characters)');
+    if (code.length < 6) {
+      setConfirmError('Please enter a valid M-Pesa transaction code (e.g. QKT1234567)');
       return;
     }
 
-    setConfirmLoading(true);
+    try {
+      setConfirmLoading(true);
 
-    setTimeout(() => {
+      const activeServiceId = orderData.serviceId || orderData._id;
+      if (!activeServiceId) {
+        setConfirmError('No valid MongoDB service selected. Please return to catalog.');
+        setConfirmLoading(false);
+        return;
+      }
+
+      // Step 1: Create Order in MongoDB if not yet created
+      const orderRes = await orderApi.createOrder({
+        items: [
+          {
+            serviceId: activeServiceId,
+            quantity: 1
+          }
+        ],
+        pickupAddress: { street: 'Main Campus Gate A', city: 'Nairobi' },
+        deliveryAddress: { street: orderData.deliveryOption || 'Nairobi', city: 'Nairobi' }
+      });
+
+      if (!orderRes.success || !orderRes.data?.order?._id) {
+        setConfirmError(orderRes.message || 'Failed to create order.');
+        setConfirmLoading(false);
+        return;
+      }
+
+      const createdOrderId = orderRes.data.order._id;
+
+      // Step 2: Confirm Manual Till Payment in MongoDB & create Audit Log
+      const { paymentApi } = await import('../api/paymentApi');
+      const confirmRes = await paymentApi.confirmManualPayment({
+        orderId: createdOrderId,
+        transactionCode: code
+      });
+
+      if (confirmRes.success) {
+        setConfirmSuccess(true);
+        setTimeout(() => {
+          navigate('/admin?tab=order-management');
+        }, 1500);
+      } else {
+        setConfirmError(confirmRes.message || 'Failed to verify transaction code.');
+      }
+    } catch (err) {
+      setConfirmError(err.response?.data?.message || 'Error processing manual payment confirmation.');
+    } finally {
       setConfirmLoading(false);
-      setConfirmSuccess(true);
-    }, 1500);
+    }
   };
 
   return (
@@ -141,23 +280,38 @@ export default function CheckoutPage() {
             <section className="bg-surface-container-highest rounded-xl p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)] relative overflow-hidden">
               <div className="absolute -top-10 -right-10 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none"></div>
               
-              <div className="flex items-center gap-3 mb-6 relative z-10">
+              <div className="flex items-center gap-3 mb-4 relative z-10">
                 <div className="w-10 h-10 rounded-full bg-surface-container-lowest flex items-center justify-center shadow-sm">
                   <span className="material-symbols-outlined text-secondary font-bold" style={{ fontVariationSettings: "'FILL' 1" }}>
                     phone_iphone
                   </span>
                 </div>
-                <h2 className="font-headline-md text-headline-md text-on-surface">M-Pesa Payment</h2>
+                <div>
+                  <h2 className="font-headline-md text-headline-md text-on-surface">M-Pesa Payment</h2>
+                  <p className="text-xs text-on-surface-variant">Recipient Till: <strong className="text-primary font-mono">{orderData.tillNumber || '8995354'}</strong> ({orderData.providerName || 'Laundry Provider'})</p>
+                </div>
+              </div>
+
+              {/* Payment Channel Confirmation Badge */}
+              <div className="bg-emerald-50/80 border border-emerald-200 rounded-lg p-3 mb-6 flex items-center justify-between text-xs text-emerald-900">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-emerald-600 text-lg">verified_user</span>
+                  <div>
+                    <span className="font-semibold block">Official Platform &amp; Provider Payment Channel</span>
+                    <span className="text-[11px] text-emerald-700">Till: {orderData.tillNumber || '8995354'} ({orderData.providerName || 'Provider'})</span>
+                  </div>
+                </div>
+                <span className="bg-emerald-100 text-emerald-800 font-mono font-bold px-2 py-1 rounded">Till #{orderData.tillNumber || '8995354'}</span>
               </div>
 
               <div className="flex flex-col gap-6 relative z-10">
-                {/* Option 1: STK Push */}
+                {/* Option 1: STK Push Prompt */}
                 <form onSubmit={handleStkPush} className="flex flex-col gap-3">
                   <h3 className="font-label-md text-label-md text-primary uppercase tracking-wider">
-                    Option 1: STK Push (Recommended)
+                    Option 1: M-Pesa Express STK Push (Recommended)
                   </h3>
                   <p className="font-body-sm text-on-surface-variant">
-                    Receive a payment prompt directly on your phone. Enter your M-Pesa PIN to authorize.
+                    Receive an instant payment prompt directly on your phone for Till #{orderData.tillNumber || '8995354'}. Enter your M-Pesa PIN to authorize.
                   </p>
                   
                   <div className="relative group mb-1">
@@ -187,6 +341,13 @@ export default function CheckoutPage() {
                     <p className="text-xs text-error font-medium px-1">{stkError}</p>
                   )}
 
+                  {paymentStatusMsg && (
+                    <div className="bg-blue-50 text-blue-900 border border-blue-200 rounded-lg p-3 text-xs flex items-center gap-2">
+                      <span className="material-symbols-outlined text-base text-blue-600 animate-spin">sync</span>
+                      <span>{paymentStatusMsg}</span>
+                    </div>
+                  )}
+
                   {stkSuccess && (
                     <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg p-3 text-xs flex items-center gap-2">
                       <span className="material-symbols-outlined text-base text-emerald-600">check_circle</span>
@@ -207,7 +368,7 @@ export default function CheckoutPage() {
                     ) : (
                       <>
                         <span className="material-symbols-outlined">send_to_mobile</span>
-                        Send Payment Request
+                        Send STK Push Request
                       </>
                     )}
                   </button>
@@ -218,15 +379,15 @@ export default function CheckoutPage() {
                 {/* Option 2: Manual Till Payment */}
                 <div className="flex flex-col gap-3">
                   <h3 className="font-label-md text-label-md text-outline uppercase tracking-wider">
-                    Option 2: Manual Till Payment
+                    {orderData.hasChannelConfigured !== false ? 'Option 2: Manual Till Payment' : 'Manual Till Payment (Required)'}
                   </h3>
                   <div className="bg-surface-container-lowest rounded-lg p-4 flex justify-between items-center border border-surface-variant/50">
                     <div className="flex flex-col">
                       <span className="font-label-md text-label-md text-outline mb-1 uppercase">
-                        Buy Goods Till Number
+                        M-Pesa Buy Goods Till Number
                       </span>
-                      <span className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-bold tracking-widest">
-                        {orderData.tillNumber}
+                      <span className="font-headline-lg-mobile text-headline-lg-mobile text-primary font-bold tracking-widest">
+                        {orderData.tillNumber || '8995354'}
                       </span>
                     </div>
                     <button
@@ -235,7 +396,7 @@ export default function CheckoutPage() {
                       className={`w-10 h-10 rounded-full bg-surface-container hover:bg-surface-variant transition-all flex items-center justify-center ${
                         copied ? 'scale-110 text-secondary' : 'text-primary'
                       }`}
-                      onClick={() => copyToClipboard(orderData.tillNumber)}
+                      onClick={() => copyToClipboard(orderData.tillNumber || '8995354')}
                     >
                       <span className="material-symbols-outlined text-lg">
                         {copied ? 'check' : 'content_copy'}
@@ -243,7 +404,7 @@ export default function CheckoutPage() {
                     </button>
                   </div>
                   <p className="font-body-sm text-on-surface-variant">
-                    After paying manually, enter the transaction code below to confirm.
+                    Pay KES <strong>{totalAmount.toLocaleString()}</strong> to Buy Goods Till <strong>{orderData.tillNumber || '8995354'}</strong>, then enter the M-Pesa transaction code below.
                   </p>
                 </div>
               </div>

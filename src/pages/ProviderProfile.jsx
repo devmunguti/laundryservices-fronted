@@ -443,6 +443,41 @@ export default function cleanersProfile({ isStandalone = true }) {
               </div>
             </div>
           </div>
+
+          {/* Payout Destination Card */}
+          <div className="bg-white rounded-xl shadow-xs overflow-hidden border border-[#c3c5d9]/10">
+            <div className="p-6 bg-[#f3f3f6] flex items-center gap-3 border-b border-[#c3c5d9]/20">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <span className="material-symbols-outlined">account_balance_wallet</span>
+              </div>
+              <div>
+                <h2 className="font-['Geist'] text-lg font-semibold text-[#1a1c1e]">Payout Destination</h2>
+                <p className="font-['Inter'] text-xs text-[#434656]">Where your net earnings (after commission) will be transferred.</p>
+              </div>
+            </div>
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="flex flex-col gap-1.5">
+                <label className="font-['Geist'] text-sm font-medium text-[#1a1c1e]">Payout Method</label>
+                <input
+                  type="text"
+                  disabled
+                  value="M-Pesa (Mobile Money)"
+                  className="bg-[#e8e8ea] rounded-lg border border-[#c3c5d9]/30 px-4 py-3 font-['Inter'] text-sm text-[#1a1c1e] shadow-xs cursor-not-allowed"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="font-['Geist'] text-sm font-medium text-[#1a1c1e]">Payout M-Pesa Phone Number</label>
+                <input
+                  type="tel"
+                  placeholder="e.g. 0712345678"
+                  value={profile.payoutPhone || ''}
+                  onChange={(e) => setProfile({ ...profile, payoutPhone: e.target.value })}
+                  className="bg-[#f9f9fc] rounded-lg border border-[#c3c5d9]/30 px-4 py-3 font-['Inter'] text-sm text-[#1a1c1e] focus:outline-none focus:ring-2 focus:ring-[#0052ff] focus:bg-white transition-colors shadow-xs"
+                />
+              </div>
+            </div>
+          </div>
         </section>
       </div>
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { SettingsProvider, useSettings } from './context/SettingsContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import Navbar from './components/layout/Navbar';
 import HomePage from './pages/HomePage';
@@ -11,9 +12,27 @@ import AdminPortal from './pages/AdminPortal';
 import ForcePasswordChange from './pages/ForcePasswordChange';
 import './App.css';
 
-function App() {
+function MaintenanceBanner() {
+  const { maintenanceTriggered, settings } = useSettings();
+  const { user } = useAuth();
+
+  if (!maintenanceTriggered && !settings?.maintenanceMode) return null;
+  if (user && user.role === 'admin') return null; // Admins bypass maintenance banner
+
   return (
-    <AuthProvider>
+    <div className="bg-amber-500 text-slate-900 font-label-md px-4 py-3 text-center flex items-center justify-center gap-2 shadow-md">
+      <span className="material-symbols-outlined text-[20px]">engineering</span>
+      <span>
+        <strong>Scheduled Maintenance:</strong> {settings?.platformName || 'Aura Laundry'} is currently undergoing system updates. Customer order placements are temporarily restricted.
+      </span>
+    </div>
+  );
+}
+
+function AppContent() {
+  return (
+    <>
+      <MaintenanceBanner />
       <Router>
         <Routes>
           {/* Customer Facing & Authentication Routes */}
@@ -78,9 +97,20 @@ function App() {
           <Route path="/admin/system-settings" element={<Navigate to="/admin?tab=system-settings" replace />} />
         </Routes>
       </Router>
-    </AuthProvider>
+    </>
+  );
+}
+
+function App() {
+  return (
+    <SettingsProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </SettingsProvider>
   );
 }
 
 export default App;
+
 

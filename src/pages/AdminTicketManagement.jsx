@@ -1,256 +1,238 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { ticketApi } from '../api/ticketApi';
 
 export default function AdminTicketManagement() {
   const [filterStatus, setFilterStatus] = useState('All');
-  const [activeMenuId, setActiveMenuId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const [tickets, setTickets] = useState([
-    {
-      id: '#TK-8902',
-      client: 'Jane Doe',
-      initials: 'JD',
-      avatarBg: 'bg-primary-container text-on-primary-container',
-      avatarUrl: null,
-      paymentRef: 'MPESA-X7Y8Z9',
-      amount: '1,450.00',
-      timestamp: 'Oct 24, 14:30',
-      status: 'Pending Verification',
-      statusType: 'pending',
-    },
-    {
-      id: '#TK-8901',
-      client: 'Wanjiku Kamau',
-      initials: 'WK',
-      avatarBg: 'bg-secondary-container text-on-secondary-container',
-      avatarUrl: null,
-      paymentRef: 'MPESA-A1B2C3',
-      amount: '3,200.00',
-      timestamp: 'Oct 24, 11:15',
-      status: 'Paid & Resolved',
-      statusType: 'resolved',
-    },
-    {
-      id: '#TK-8899',
-      client: 'David Ochieng',
-      initials: null,
-      avatarUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBQDrHowM9Jow_06x4rnt3rF2m1Jux9tcDMdGUO1RqP77TAsiaa8WKDag_Af3FUgYTSje0J4D4c-RPYJy7IiiAuUDVA_YtcNyE2Y-fpL0urGQjHx7KKZ-LXCb-Zk2wMxPAsZK_cQ2Fq-AzL0BgPvJj1TklBlgHHWBaBwKRI4ITR3-a4_F8oOtSWOUL5xwNI-M3BCkBH4AulhU797PqckDjrg1cylcXeXwIJlS3jsxSw6TvW-nO3o_uomw',
-      paymentRef: 'CARD-4490-X',
-      amount: '850.00',
-      timestamp: 'Oct 23, 16:45',
-      status: 'Pending Verification',
-      statusType: 'pending',
-    },
-    {
-      id: '#TK-8895',
-      client: "Aisha Ndung'u",
-      initials: 'AN',
-      avatarBg: 'bg-tertiary-container text-on-tertiary-container',
-      avatarUrl: null,
-      paymentRef: 'MPESA-M9N8P7',
-      amount: '2,100.00',
-      timestamp: 'Oct 23, 09:20',
-      status: 'Disputed',
-      statusType: 'disputed',
-    },
-  ]);
+  // Ticket Reply Drawer Modal State
+  const [activeTicket, setActiveTicket] = useState(null);
+  const [replyMessage, setReplyMessage] = useState('');
+  const [replySubmitting, setReplySubmitting] = useState(false);
 
-  const handleVerifyPayment = (id) => {
-    setTickets((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, status: 'Paid & Resolved', statusType: 'resolved' } : t))
-    );
-  };
-
-  const handleReviewIssue = (id) => {
-    alert(`Reviewing dispute for ticket ${id}. Contacting customer support and gateway logs.`);
-  };
-
-  const handleExportCSV = () => {
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      ['Ticket ID,Client Name,Payment Ref,Amount (KES),Timestamp,Status']
-        .concat(
-          filteredTickets.map(
-            (t) => `${t.id},"${t.client}",${t.paymentRef},${t.amount},"${t.timestamp}",${t.status}`
-          )
-        )
-        .join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', 'Aura_Laundry_Payment_Tickets.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const filteredTickets = tickets.filter((t) => {
-    if (filterStatus === 'All') return true;
-    if (filterStatus === 'Pending') return t.statusType === 'pending';
-    if (filterStatus === 'Resolved') return t.statusType === 'resolved';
-    if (filterStatus === 'Disputed') return t.statusType === 'disputed';
-    return true;
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPreviousPage: false
   });
 
+  // Debounce search
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
+
+  const fetchTickets = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const params = {
+        page,
+        limit,
+        status: filterStatus !== 'All' ? filterStatus : undefined,
+        search: debouncedSearch
+      };
+      const res = await ticketApi.getTickets(params);
+      if (res.success && res.data) {
+        setTickets(res.data.tickets || []);
+        if (res.data.pagination) setPagination(res.data.pagination);
+      } else {
+        setError(res.message || 'Failed to fetch tickets.');
+      }
+    } catch (err) {
+      console.error('Failed to fetch tickets from MongoDB:', err);
+      setError(err.response?.data?.message || err.message || 'Error loading tickets.');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, limit, filterStatus, debouncedSearch]);
+
+  useEffect(() => {
+    fetchTickets();
+  }, [fetchTickets]);
+
+  const handleUpdateStatus = async (ticketId, status) => {
+    try {
+      const res = await ticketApi.updateTicketStatus(ticketId, { status });
+      if (res.success) {
+        await fetchTickets();
+        if (activeTicket && activeTicket._id === ticketId) {
+          const detailRes = await ticketApi.getTicketById(ticketId);
+          if (detailRes.success) setActiveTicket(detailRes.data);
+        }
+      } else {
+        alert(res.message || 'Failed to update ticket status.');
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error updating status.');
+    }
+  };
+
+  const handleOpenTicket = async (ticketId) => {
+    try {
+      const res = await ticketApi.getTicketById(ticketId);
+      if (res.success && res.data) {
+        setActiveTicket(res.data);
+      }
+    } catch (err) {
+      alert('Failed to load ticket conversation.');
+    }
+  };
+
+  const handleSendReply = async (e) => {
+    e.preventDefault();
+    if (!activeTicket || !replyMessage.trim()) return;
+
+    try {
+      setReplySubmitting(true);
+      const res = await ticketApi.addTicketMessage(activeTicket._id, replyMessage.trim());
+      if (res.success) {
+        setReplyMessage('');
+        const detailRes = await ticketApi.getTicketById(activeTicket._id);
+        if (detailRes.success) setActiveTicket(detailRes.data);
+        await fetchTickets();
+      } else {
+        alert(res.message || 'Failed to send message.');
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error posting reply.');
+    } finally {
+      setReplySubmitting(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col w-full gap-stack-gap-lg">
-      {/* Analytics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-stack-gap-md">
-        {/* Card 1 */}
-        <div className="bg-surface-container-lowest p-6 rounded-2xl shadow-xs border border-surface-container/40 flex flex-col justify-between group">
-          <div className="flex items-start justify-between mb-2">
-            <span className="font-label-sm text-on-surface-variant uppercase tracking-wider">TOTAL TICKETS RAISED</span>
-            <div className="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center">
-              <span className="material-symbols-outlined text-[20px]">confirmation_number</span>
-            </div>
-          </div>
-          <div>
-            <div className="font-headline-xl text-on-surface mb-1">1,248</div>
-            <div className="flex items-center gap-1 text-secondary font-label-sm">
-              <span className="material-symbols-outlined text-[16px]">trending_up</span>
-              <span>+12% this week</span>
-            </div>
-          </div>
+    <div className="flex flex-col w-full gap-stack-gap-lg relative">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface-container-lowest p-6 rounded-2xl shadow-xs border border-surface-container/40">
+        <div>
+          <h1 className="font-headline-xl text-on-surface">Ticket & Support Management</h1>
+          <p className="font-body-md text-on-surface-variant mt-1">
+            Review and resolve support tickets, dispute inquiries, and client messages from MongoDB.
+          </p>
         </div>
-
-        {/* Card 2 */}
-        <div className="bg-surface-container-lowest p-6 rounded-2xl shadow-xs border border-surface-container/40 flex flex-col justify-between group">
-          <div className="flex items-start justify-between mb-2">
-            <span className="font-label-sm text-on-surface-variant uppercase tracking-wider">PAID TICKETS</span>
-            <div className="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center">
-              <span className="material-symbols-outlined text-[20px]">payments</span>
-            </div>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">
+              search
+            </span>
+            <input
+              type="text"
+              placeholder="Search Ticket ID or Subject..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="bg-surface-container py-2 pl-9 pr-4 rounded-full text-xs font-body-sm text-on-surface outline-none border border-transparent focus:border-primary"
+            />
           </div>
-          <div>
-            <div className="font-headline-xl text-on-surface mb-1">1,102</div>
-            <div className="flex items-center gap-1 text-secondary font-label-sm">
-              <span className="material-symbols-outlined text-[16px]">check_circle</span>
-              <span>88% resolution rate</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 3 */}
-        <div className="bg-surface-container-lowest p-6 rounded-2xl shadow-xs border border-error-container/40 flex flex-col justify-between group">
-          <div className="flex items-start justify-between mb-2">
-            <span className="font-label-sm text-error uppercase tracking-wider font-semibold">UNRESOLVED PAYMENTS</span>
-            <div className="w-10 h-10 rounded-full bg-error-container/30 text-error flex items-center justify-center">
-              <span className="material-symbols-outlined text-[20px]">money_off</span>
-            </div>
-          </div>
-          <div>
-            <div className="font-headline-xl text-on-surface mb-1">146</div>
-            <div className="flex items-center gap-1 text-error font-label-sm">
-              <span className="material-symbols-outlined text-[16px]">warning</span>
-              <span>Requires attention</span>
-            </div>
-          </div>
+          <select
+            value={filterStatus}
+            onChange={(e) => {
+              setFilterStatus(e.target.value);
+              setPage(1);
+            }}
+            className="bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md py-2 px-4 rounded-full outline-none cursor-pointer border border-transparent focus:border-primary text-xs"
+          >
+            <option value="All">All Statuses</option>
+            <option value="Open">Open</option>
+            <option value="In_Progress">In Progress</option>
+            <option value="Resolved">Resolved</option>
+            <option value="Closed">Closed</option>
+          </select>
         </div>
       </div>
 
       {/* Main Table Container */}
-      <div className="bg-surface-container-lowest rounded-2xl shadow-xs border border-surface-container/40 flex flex-col overflow-hidden">
-        {/* Table Header */}
-        <div className="p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-surface-container-lowest border-b border-surface-container/40">
-          <div>
-            <h3 className="font-headline-md text-on-surface">Recent Payment Tickets</h3>
-            <p className="font-body-sm text-on-surface-variant mt-0.5">
-              Manage and resolve client payment disputes.
-            </p>
+      <div className="bg-surface-container-lowest rounded-2xl shadow-xs border border-surface-container/40 flex flex-col overflow-hidden relative min-h-[350px]">
+        {loading && (
+          <div className="absolute inset-0 bg-surface-container-lowest/80 backdrop-blur-xs flex items-center justify-center z-10">
+            <div className="flex items-center gap-3 font-body-md text-primary">
+              <span className="material-symbols-outlined animate-spin text-[28px]">sync</span>
+              Loading tickets from MongoDB...
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md py-2 px-4 rounded-full outline-none cursor-pointer border border-transparent focus:border-primary"
-            >
-              <option value="All">Filter: All Status</option>
-              <option value="Pending">Pending Verification</option>
-              <option value="Resolved">Paid & Resolved</option>
-              <option value="Disputed">Disputed</option>
-            </select>
-            <button
-              onClick={handleExportCSV}
-              className="bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md py-2 px-4 rounded-full transition-colors flex items-center gap-2 cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[18px]">download</span>
-              Export
-            </button>
-          </div>
-        </div>
+        )}
 
-        {/* Table */}
+        {error && (
+          <div className="p-4 bg-rose-50 border-b border-rose-200 text-rose-700 text-xs flex justify-between items-center">
+            <span>{error}</span>
+            <button onClick={fetchTickets} className="underline font-semibold cursor-pointer">Retry</button>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[700px]">
             <thead>
               <tr className="bg-surface-container-low/50">
-                <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">TICKET ID</th>
-                <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">CLIENT NAME</th>
-                <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">PAYMENT REF</th>
-                <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">AMOUNT (KES)</th>
-                <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">TIMESTAMP</th>
-                <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">STATUS</th>
-                <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider text-center">ACTION</th>
+                <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">Ticket ID</th>
+                <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">User</th>
+                <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">Subject</th>
+                <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">Priority</th>
+                <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">Status</th>
+                <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider text-center">Action</th>
               </tr>
             </thead>
             <tbody className="font-body-sm text-on-surface divide-y divide-surface-container/40">
-              {filteredTickets.map((t) => (
-                <tr key={t.id} className="hover:bg-surface-container-low/40 transition-colors group">
-                  <td className="py-4 px-6 font-label-md font-semibold text-on-surface">{t.id}</td>
-                  <td className="py-4 px-6">
-                    <div className="flex items-center gap-3">
-                      {t.avatarUrl ? (
-                        <img className="w-8 h-8 rounded-full object-cover" alt={t.client} src={t.avatarUrl} />
-                      ) : (
-                        <div className={`w-8 h-8 rounded-full ${t.avatarBg} flex items-center justify-center font-label-md font-semibold text-xs`}>
-                          {t.initials}
-                        </div>
-                      )}
-                      <span className="font-label-md font-medium text-on-surface">{t.client}</span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6 font-mono text-xs text-on-surface-variant font-medium">{t.paymentRef}</td>
-                  <td className="py-4 px-6 font-label-md font-semibold text-on-surface">{t.amount}</td>
-                  <td className="py-4 px-6 text-on-surface-variant">{t.timestamp}</td>
-                  <td className="py-4 px-6">
-                    {t.statusType === 'pending' && (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-surface-container text-on-surface-variant">
-                        <span className="w-1.5 h-1.5 rounded-full bg-on-surface-variant" />
-                        Pending Verification
-                      </span>
-                    )}
-                    {t.statusType === 'resolved' && (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary-container/20 text-primary">
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                        Paid & Resolved
-                      </span>
-                    )}
-                    {t.statusType === 'disputed' && (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-error-container/20 text-error">
-                        <span className="w-1.5 h-1.5 rounded-full bg-error" />
-                        Disputed
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-4 px-6 text-center">
-                    {t.statusType === 'pending' && (
-                      <button
-                        onClick={() => handleVerifyPayment(t.id)}
-                        className="bg-primary hover:bg-primary-container text-on-primary font-label-md text-xs px-4 py-2 rounded-lg transition-colors cursor-pointer shadow-xs"
-                      >
-                        Verify Payment
-                      </button>
-                    )}
-                    {t.statusType === 'disputed' && (
-                      <button
-                        onClick={() => handleReviewIssue(t.id)}
-                        className="bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-xs px-4 py-2 rounded-lg transition-colors cursor-pointer"
-                      >
-                        Review Issue
-                      </button>
-                    )}
+              {tickets.length === 0 && !loading ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-on-surface-variant font-body-md">
+                    No support tickets found.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                tickets.map((t) => (
+                  <tr key={t._id} className="hover:bg-surface-container-low/40 transition-colors group">
+                    <td className="py-4 px-6 font-label-md font-semibold text-primary">{t.ticketId || t._id}</td>
+                    <td className="py-4 px-6">
+                      <div className="font-label-md text-on-surface font-semibold">{t.user?.fullName || 'User'}</div>
+                      <div className="font-body-sm text-on-surface-variant text-[11px]">{t.user?.email}</div>
+                    </td>
+                    <td className="py-4 px-6 font-body-sm font-medium text-on-surface max-w-xs truncate">{t.subject}</td>
+                    <td className="py-4 px-6">
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${t.priority === 'Urgent' || t.priority === 'High' ? 'bg-rose-100 text-rose-800' : 'bg-surface-container text-on-surface-variant'
+                        }`}>
+                        {t.priority || 'Medium'}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${t.status === 'Resolved' ? 'bg-emerald-100 text-emerald-800' : t.status === 'In_Progress' ? 'bg-amber-100 text-amber-800' : 'bg-surface-container text-on-surface-variant'
+                        }`}>
+                        {t.status}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6 text-center">
+                      <div className="flex justify-center gap-2">
+                        <button
+                          onClick={() => handleOpenTicket(t._id)}
+                          className="bg-primary hover:bg-primary-container text-on-primary font-label-md text-xs px-3 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">forum</span> View & Reply
+                        </button>
+                        {t.status !== 'Resolved' && (
+                          <button
+                            onClick={() => handleUpdateStatus(t._id, 'Resolved')}
+                            className="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-label-md text-xs px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                          >
+                            Resolve
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -258,28 +240,101 @@ export default function AdminTicketManagement() {
         {/* Pagination */}
         <div className="p-4 bg-surface-container-lowest border-t border-surface-container/40 flex justify-between items-center">
           <span className="font-body-sm text-on-surface-variant">
-            Showing 1 to {filteredTickets.length} of 146 pending tickets
+            Showing page <span className="font-semibold">{pagination.page}</span> of <span className="font-semibold">{pagination.totalPages}</span> ({pagination.total} total tickets)
           </span>
           <div className="flex gap-2 items-center">
-            <button className="p-1 text-on-surface-variant hover:bg-surface-container rounded transition-colors disabled:opacity-50 cursor-pointer">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={!pagination.hasPreviousPage || loading}
+              className="p-1.5 text-on-surface-variant hover:bg-surface-container rounded transition-colors disabled:opacity-30 cursor-pointer"
+            >
               <span className="material-symbols-outlined text-[18px]">chevron_left</span>
             </button>
-            <button className="w-8 h-8 rounded flex items-center justify-center font-label-sm bg-primary text-on-primary">
-              1
-            </button>
-            <button className="w-8 h-8 rounded flex items-center justify-center font-label-sm text-on-surface hover:bg-surface-container transition-colors cursor-pointer">
-              2
-            </button>
-            <button className="w-8 h-8 rounded flex items-center justify-center font-label-sm text-on-surface hover:bg-surface-container transition-colors cursor-pointer">
-              3
-            </button>
-            <span className="font-label-sm text-on-surface-variant px-1">...</span>
-            <button className="p-1 text-on-surface-variant hover:bg-surface-container rounded transition-colors cursor-pointer">
+            <button
+              onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
+              disabled={!pagination.hasNextPage || loading}
+              className="p-1.5 text-on-surface-variant hover:bg-surface-container rounded transition-colors disabled:opacity-30 cursor-pointer"
+            >
               <span className="material-symbols-outlined text-[18px]">chevron_right</span>
             </button>
           </div>
         </div>
       </div>
+
+      {/* Ticket Reply Modal / Drawer */}
+      {activeTicket && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-surface-container-lowest rounded-2xl shadow-xl max-w-2xl w-full p-6 border border-surface-container/60 space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center border-b border-surface-container/40 pb-3">
+              <div>
+                <h3 className="font-headline-md text-on-surface flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary">confirmation_number</span>
+                  {activeTicket.ticketId}: {activeTicket.subject}
+                </h3>
+                <p className="font-body-sm text-on-surface-variant text-xs mt-1">
+                  User: <span className="font-semibold">{activeTicket.user?.fullName}</span> ({activeTicket.user?.email}) | Priority: <span className="font-semibold">{activeTicket.priority}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveTicket(null)}
+                className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            {/* Conversation Messages Thread */}
+            <div className="flex-1 overflow-y-auto space-y-3 p-3 bg-surface-container-low/50 rounded-xl max-h-72">
+              {activeTicket.messages?.map((msg, i) => (
+                <div key={i} className="bg-surface-container-lowest p-3 rounded-lg border border-surface-container/40 space-y-1">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-semibold text-primary">{msg.sender?.fullName || 'User'}</span>
+                    <span className="text-on-surface-variant text-[11px]">{new Date(msg.createdAt).toLocaleString()}</span>
+                  </div>
+                  <p className="font-body-sm text-on-surface whitespace-pre-line">{msg.text}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Admin Reply Form */}
+            <form onSubmit={handleSendReply} className="space-y-3">
+              <textarea
+                required
+                rows={3}
+                placeholder="Type your response to the user..."
+                value={replyMessage}
+                onChange={(e) => setReplyMessage(e.target.value)}
+                className="w-full bg-surface-container p-3 rounded-xl font-body-sm text-on-surface outline-none border border-transparent focus:border-primary"
+              />
+              <div className="flex justify-between items-center">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateStatus(activeTicket._id, 'Resolved')}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 font-label-sm hover:bg-emerald-200 cursor-pointer"
+                  >
+                    Mark Resolved
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateStatus(activeTicket._id, 'Closed')}
+                    className="px-3 py-1.5 rounded-lg bg-surface-container text-on-surface-variant font-label-sm hover:bg-surface-variant cursor-pointer"
+                  >
+                    Close Ticket
+                  </button>
+                </div>
+                <button
+                  type="submit"
+                  disabled={replySubmitting || !replyMessage.trim()}
+                  className="px-5 py-2 rounded-lg font-label-md bg-primary text-on-primary hover:bg-primary-container shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                >
+                  {replySubmitting ? 'Sending...' : 'Send Reply'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
