@@ -18,6 +18,14 @@ export const orderApi = {
   },
 
   /**
+   * Fetch live order analytics and metrics (Today's orders, pending pickups, ready for delivery)
+   */
+  getOrderMetrics: async () => {
+    const response = await api.get('/orders/metrics');
+    return response.data;
+  },
+
+  /**
    * Get single order by ID
    */
   getOrderById: async (id) => {
@@ -38,6 +46,14 @@ export const orderApi = {
    */
   updateOrderStatus: async (id, status) => {
     const response = await api.patch(`/orders/${id}/status`, { status });
+    return response.data;
+  },
+
+  /**
+   * Get order tracking data by orderRef (customer, provider, admin, guest)
+   */
+  getOrderTracking: async (orderRef) => {
+    const response = await api.get(`/orders/track/${orderRef}`);
     return response.data;
   }
 };

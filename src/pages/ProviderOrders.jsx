@@ -13,18 +13,35 @@ export default function cleanersOrders({ isStandalone = true }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
-  // Orders State
+  // Orders & Metrics State
   const [orders, setOrders] = useState([]);
+  const [metrics, setMetrics] = useState({
+    todayOrders: 0,
+    yesterdayOrders: 0,
+    growthFormatted: '+0%',
+    isPositiveGrowth: true,
+    pendingPickups: 0,
+    urgentPickups: 0,
+    inWash: 0,
+    readyForDelivery: 0,
+    outForDelivery: 0,
+    delivered: 0,
+    totalOrders: 0
+  });
 
-  const fetchOrders = useCallback(async () => {
+  const fetchOrdersAndMetrics = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await orderApi.getOrders({
-        search: searchQuery,
-        status: filterTab !== 'all' ? filterTab : undefined
-      });
-      if (res.success && res.data) {
-        const rawList = res.data.orders || [];
+      const [ordersRes, metricsRes] = await Promise.all([
+        orderApi.getOrders({
+          search: searchQuery,
+          status: filterTab !== 'all' ? filterTab : undefined
+        }),
+        orderApi.getOrderMetrics().catch(() => ({ success: false }))
+      ]);
+
+      if (ordersRes.success && ordersRes.data) {
+        const rawList = ordersRes.data.orders || [];
         const formatted = rawList.map((o) => ({
           id: o.orderRef || `#ORD-${o._id.slice(-6).toUpperCase()}`,
           rawId: o._id,
@@ -37,31 +54,38 @@ export default function cleanersOrders({ isStandalone = true }) {
           itemCount: `${o.items?.length || 1} item(s)`,
           date: new Date(o.createdAt || Date.now()).toLocaleDateString(),
           time: new Date(o.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          status: (o.status || 'Pending').toLowerCase().replace(' ', '-'),
-          statusLabel: o.status || 'Pending',
-          statusBg: o.status === 'Cancelled' ? 'bg-[#eeeef0] text-[#737688]' : 'bg-[#c2e8ff]/40 text-[#004d67]',
-          statusDot: o.status === 'Cancelled' ? 'bg-[#737688]' : 'bg-[#006688]',
-          amount: `KES ${(o.pricing?.grandTotal || o.totalAmount || 0).toLocaleString()}`
+          status: (o.status || 'Pending').toLowerCase().replace(/_/g, '-'),
+          rawStatus: o.status || 'Pending',
+          statusLabel: (o.status || 'Pending').replace(/_/g, ' '),
+          statusBg: o.status === 'Cancelled' ? 'bg-[#eeeef0] text-[#737688]' : o.status === 'Delivered' ? 'bg-emerald-100 text-emerald-800' : 'bg-[#c2e8ff]/40 text-[#004d67]',
+          statusDot: o.status === 'Cancelled' ? 'bg-[#737688]' : o.status === 'Delivered' ? 'bg-emerald-600' : 'bg-[#006688]',
+          amount: `KES ${(o.pricing?.grandTotal || o.totalAmount || 0).toLocaleString()}`,
+          transactionId: o.payment?.transactionId || null,
+          paymentStatus: o.paymentStatus || 'Pending'
         }));
         setOrders(formatted);
       }
+
+      if (metricsRes.success && metricsRes.data) {
+        setMetrics(metricsRes.data);
+      }
     } catch (err) {
-      console.error('Failed to fetch provider orders:', err);
+      console.error('Failed to fetch provider orders & metrics:', err);
     } finally {
       setLoading(false);
     }
   }, [searchQuery, filterTab]);
 
   useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
+    fetchOrdersAndMetrics();
+  }, [fetchOrdersAndMetrics]);
 
   const handleUpdateStatus = async (rawId, newMongoStatus) => {
     try {
       setUpdatingOrderId(rawId);
       const res = await orderApi.updateOrderStatus(rawId, newMongoStatus);
       if (res.success) {
-        await fetchOrders();
+        await fetchOrdersAndMetrics();
       } else {
         alert(res.message || 'Failed to update order status.');
       }
@@ -72,58 +96,81 @@ export default function cleanersOrders({ isStandalone = true }) {
     }
   };
 
-
   const filteredOrders = orders.filter(ord => {
     const matchesSearch = ord.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       ord.customer.toLowerCase().includes(searchQuery.toLowerCase()) ||
       ord.service.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesTab = filterTab === 'all' || ord.status === filterTab;
+    const matchesTab = filterTab === 'all' || ord.rawStatus === filterTab || ord.status === filterTab;
     return matchesSearch && matchesTab;
   });
+
+  const todayFormatted = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
   const mainContent = (
     <div className="flex flex-col w-full h-full relative font-['Inter'] text-[#1a1c1e]">
       {/* Top Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {/* Card 1: Today's Orders */}
         <div className="bg-white rounded-2xl shadow-xs hover:shadow-md transition-shadow relative overflow-hidden group p-6 sm:p-8 border border-[#c3c5d9]/10">
           <div className="flex items-start justify-between relative z-10">
             <div>
               <p className="font-['Geist'] text-xs text-[#434656] uppercase tracking-wider font-semibold mb-2">Today's Orders</p>
-              <h3 className="font-['Geist'] text-3xl md:text-4xl font-bold text-[#1a1c1e]">142</h3>
+              <h3 className="font-['Geist'] text-3xl md:text-4xl font-bold text-[#1a1c1e]">
+                {metrics.todayOrders}
+              </h3>
             </div>
             <div className="w-12 h-12 rounded-full bg-[#0052ff]/10 flex items-center justify-center">
               <span className="material-symbols-outlined text-[#0052ff] text-[28px]">receipt_long</span>
             </div>
           </div>
           <div className="mt-4 flex items-center gap-2 font-['Geist'] text-xs font-semibold">
-            <span className="material-symbols-outlined text-[16px] text-[#008800]">trending_up</span>
-            <span className="text-[#008800]">+12%</span>
-            <span className="text-[#434656] font-normal">vs yesterday</span>
+            <span className={`material-symbols-outlined text-[16px] ${metrics.isPositiveGrowth ? 'text-[#008800]' : 'text-[#ba1a1a]'}`}>
+              {metrics.isPositiveGrowth ? 'trending_up' : 'trending_down'}
+            </span>
+            <span className={metrics.isPositiveGrowth ? 'text-[#008800]' : 'text-[#ba1a1a]'}>
+              {metrics.growthFormatted}
+            </span>
+            <span className="text-[#434656] font-normal">vs yesterday ({metrics.yesterdayOrders})</span>
           </div>
         </div>
 
+        {/* Card 2: Pending Pickups */}
         <div className="bg-white rounded-2xl shadow-xs hover:shadow-md transition-shadow relative overflow-hidden group p-6 sm:p-8 border border-[#c3c5d9]/10">
           <div className="flex items-start justify-between relative z-10">
             <div>
               <p className="font-['Geist'] text-xs text-[#434656] uppercase tracking-wider font-semibold mb-2">Pending Pickups</p>
-              <h3 className="font-['Geist'] text-3xl md:text-4xl font-bold text-[#1a1c1e]">28</h3>
+              <h3 className="font-['Geist'] text-3xl md:text-4xl font-bold text-[#1a1c1e]">
+                {metrics.pendingPickups}
+              </h3>
             </div>
             <div className="w-12 h-12 rounded-full bg-[#00c1fd]/10 flex items-center justify-center">
               <span className="material-symbols-outlined text-[#00c1fd] text-[28px]">local_shipping</span>
             </div>
           </div>
           <div className="mt-4 flex items-center gap-2 font-['Geist'] text-xs font-semibold">
-            <span className="material-symbols-outlined text-[16px] text-[#ba1a1a]">priority_high</span>
-            <span className="text-[#ba1a1a]">5 Urgent</span>
-            <span className="text-[#434656] font-normal">require attention</span>
+            {metrics.urgentPickups > 0 ? (
+              <>
+                <span className="material-symbols-outlined text-[16px] text-[#ba1a1a]">priority_high</span>
+                <span className="text-[#ba1a1a]">{metrics.urgentPickups} Urgent</span>
+                <span className="text-[#434656] font-normal">require attention</span>
+              </>
+            ) : (
+              <>
+                <span className="material-symbols-outlined text-[16px] text-[#008800]">check_circle</span>
+                <span className="text-[#008800]">All on schedule</span>
+              </>
+            )}
           </div>
         </div>
 
+        {/* Card 3: Ready for Delivery */}
         <div className="bg-white rounded-2xl shadow-xs hover:shadow-md transition-shadow relative overflow-hidden group p-6 sm:p-8 border border-[#c3c5d9]/10">
           <div className="flex items-start justify-between relative z-10">
             <div>
               <p className="font-['Geist'] text-xs text-[#434656] uppercase tracking-wider font-semibold mb-2">Ready for Delivery</p>
-              <h3 className="font-['Geist'] text-3xl md:text-4xl font-bold text-[#1a1c1e]">45</h3>
+              <h3 className="font-['Geist'] text-3xl md:text-4xl font-bold text-[#1a1c1e]">
+                {metrics.readyForDelivery}
+              </h3>
             </div>
             <div className="w-12 h-12 rounded-full bg-[#61666f]/10 flex items-center justify-center">
               <span className="material-symbols-outlined text-[#61666f] text-[28px]">inventory_2</span>
@@ -131,7 +178,9 @@ export default function cleanersOrders({ isStandalone = true }) {
           </div>
           <div className="mt-4 flex items-center gap-2 font-['Geist'] text-xs font-semibold">
             <span className="w-2 h-2 rounded-full bg-[#0052ff]"></span>
-            <span className="text-[#434656] font-normal">Ready to dispatch</span>
+            <span className="text-[#434656] font-normal">
+              {metrics.readyForDelivery > 0 ? `${metrics.readyForDelivery} ready to dispatch` : 'No orders awaiting dispatch'}
+            </span>
           </div>
         </div>
       </div>
@@ -154,19 +203,19 @@ export default function cleanersOrders({ isStandalone = true }) {
               </div>
               <button className="flex items-center gap-2 bg-[#f3f3f6] hover:bg-[#e8e8ea] transition-colors text-[#1a1c1e] font-['Geist'] text-sm font-medium px-4 py-2.5 rounded-xl whitespace-nowrap">
                 <span className="material-symbols-outlined text-[18px]">calendar_today</span>
-                <span>Today, Oct 24</span>
+                <span>Today, {todayFormatted}</span>
               </button>
             </div>
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
             {[
-              { id: 'all', label: 'All Orders' },
-              { id: 'pending', label: 'Pending' },
-              { id: 'in-progress', label: 'In Progress' },
-              { id: 'ready-for-pickup', label: 'Already Delivered', count: 12 },
-              { id: 'completed', label: 'Completed' },
-              { id: 'cancelled', label: 'Cancelled' },
+              { id: 'all', label: 'All Orders', count: metrics.totalOrders },
+              { id: 'Pending', label: 'Pending Pickups', count: metrics.pendingPickups },
+              { id: 'In_Wash', label: 'In Wash / Cleaning', count: metrics.inWash },
+              { id: 'Ready_For_Delivery', label: 'Ready for Delivery', count: metrics.readyForDelivery },
+              { id: 'Delivered', label: 'Delivered', count: metrics.delivered },
+              { id: 'Cancelled', label: 'Cancelled', count: metrics.cancelled },
             ].map((tab) => {
               const isSelected = filterTab === tab.id;
               return (
@@ -179,7 +228,7 @@ export default function cleanersOrders({ isStandalone = true }) {
                     }`}
                 >
                   <span>{tab.label}</span>
-                  {tab.count && (
+                  {typeof tab.count === 'number' && (
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isSelected ? 'bg-[#dfe3ff] text-[#0038b6]' : 'bg-[#0052ff] text-white'}`}>
                       {tab.count}
                     </span>
@@ -271,7 +320,7 @@ export default function cleanersOrders({ isStandalone = true }) {
 
         {/* Table Pagination */}
         <div className="border-t border-[#c3c5d9]/30 flex flex-col sm:flex-row items-center justify-between text-[#434656] font-['Inter'] text-sm p-6 gap-4">
-          <p>Showing 1 to {filteredOrders.length} of 142 entries</p>
+          <p>Showing 1 to {filteredOrders.length} of {metrics.totalOrders || filteredOrders.length} entries</p>
           <div className="flex items-center gap-1.5">
             <button
               disabled={currentPage === 1}
@@ -338,6 +387,43 @@ export default function cleanersOrders({ isStandalone = true }) {
                 <span className="text-xs text-[#434656] block">Date & Time</span>
                 <span className="font-medium text-[#1a1c1e]">{selectedOrder.date} at {selectedOrder.time}</span>
               </div>
+
+              {/* M-Pesa Transaction Code Highlight */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-[#434656] font-semibold uppercase tracking-wider flex items-center gap-1">
+                    <span className="material-symbols-outlined text-green-600 text-sm">phone_iphone</span>
+                    M-Pesa Transaction Code
+                  </span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    selectedOrder.paymentStatus === 'Paid'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {selectedOrder.paymentStatus === 'Paid' ? 'Paid' : 'Pending'}
+                  </span>
+                </div>
+                {selectedOrder.transactionId ? (
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="font-mono text-base font-bold text-[#003ec7] tracking-widest bg-white px-3 py-1 rounded border border-[#c3c5d9]/40">
+                      {selectedOrder.transactionId}
+                    </span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard?.writeText(selectedOrder.transactionId);
+                        alert('M-Pesa Code Copied!');
+                      }}
+                      className="text-xs bg-[#003ec7]/10 hover:bg-[#003ec7]/20 text-[#003ec7] font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-sm">content_copy</span>
+                      <span>Copy</span>
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-xs text-gray-400 italic">No M-Pesa code recorded</span>
+                )}
+              </div>
+
               <div className="flex justify-between items-center border-t border-[#c3c5d9]/30 pt-3">
                 <span className="font-semibold text-[#1a1c1e]">Total Amount:</span>
                 <span className="font-bold text-lg text-[#003ec7]">{selectedOrder.amount}</span>
@@ -366,27 +452,38 @@ export default function cleanersOrders({ isStandalone = true }) {
               <span className="material-symbols-outlined">close</span>
             </button>
             <h3 className="font-['Geist'] text-xl font-bold text-[#1a1c1e] mb-4">Update Status for {updatingOrderId}</h3>
-            <div className="space-y-2">
               {[
-                { status: 'Pending', label: 'Pending Pickup', bg: 'bg-amber-100 text-amber-900', dot: 'bg-amber-600' },
-                { status: 'In_Wash', label: 'In Progress', bg: 'bg-[#c2e8ff]/40 text-[#004d67]', dot: 'bg-[#006688]' },
-                { status: 'Ready_For_Delivery', label: 'Ready for Delivery', bg: 'bg-[#0052ff]/20 text-[#0038b6]', dot: 'bg-[#0052ff]' },
-                { status: 'Delivered', label: 'Completed', bg: 'bg-emerald-100 text-emerald-800', dot: 'bg-emerald-600' },
+                { status: 'Pending', label: '1. Order Placed / Pending', bg: 'bg-amber-100 text-amber-900', dot: 'bg-amber-600' },
+                { status: 'Pickup_Scheduled', label: '2. Pickup Scheduled', bg: 'bg-blue-100 text-blue-900', dot: 'bg-blue-600' },
+                { status: 'Picked_Up', label: '3. Picked Up', bg: 'bg-indigo-100 text-indigo-900', dot: 'bg-indigo-600' },
+                { status: 'In_Wash', label: '4. In Wash / Cleaning', bg: 'bg-[#c2e8ff]/40 text-[#004d67]', dot: 'bg-[#006688]' },
+                { status: 'Ready_For_Delivery', label: '5. Ready for Delivery', bg: 'bg-[#0052ff]/20 text-[#0038b6]', dot: 'bg-[#0052ff]' },
+                { status: 'Out_For_Delivery', label: '6. Out for Delivery', bg: 'bg-purple-100 text-purple-900', dot: 'bg-purple-600' },
+                { status: 'Delivered', label: '7. Delivered / Completed', bg: 'bg-emerald-100 text-emerald-800', dot: 'bg-emerald-600' },
                 { status: 'Cancelled', label: 'Cancelled', bg: 'bg-[#eeeef0] text-[#737688]', dot: 'bg-[#737688]' },
               ].map(opt => {
                 const targetOrd = orders.find(o => o.id === updatingOrderId);
+                const isCurrent = targetOrd && targetOrd.statusLabel === opt.status;
                 return (
                   <button
                     key={opt.status}
                     onClick={() => targetOrd && handleUpdateStatus(targetOrd.rawId, opt.status)}
-                    className="w-full text-left px-4 py-3 rounded-xl border border-[#c3c5d9]/30 hover:bg-[#f3f3f6] font-['Geist'] text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                    className={`w-full text-left px-4 py-2.5 rounded-xl border font-['Geist'] text-sm font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                      isCurrent
+                        ? 'border-[#0052ff] bg-[#0052ff]/5 text-[#0052ff]'
+                        : 'border-[#c3c5d9]/30 hover:bg-[#f3f3f6] text-[#1a1c1e]'
+                    }`}
                   >
-                    <span className={`w-2 h-2 rounded-full ${opt.dot}`}></span>
-                    <span>{opt.label}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${opt.dot}`}></span>
+                      <span>{opt.label}</span>
+                    </div>
+                    {isCurrent && (
+                      <span className="text-xs bg-[#0052ff] text-white px-2 py-0.5 rounded-full font-normal">Current</span>
+                    )}
                   </button>
                 );
               })}
-            </div>
           </div>
         </div>
       )}

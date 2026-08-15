@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { orderApi } from '../api/orderApi';
+import { paymentApi } from '../api/paymentApi';
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ export default function CheckoutPage() {
   const totalAmount = orderData.servicePrice + orderData.deliveryPrice;
 
   // Form states
+  const [orderApiResponse, setOrderApiResponse] = useState(null);
   const [phone, setPhone] = useState('');
   const [paymentStatusMsg, setPaymentStatusMsg] = useState('');
   const [stkLoading, setStkLoading] = useState(false);
@@ -27,10 +29,16 @@ export default function CheckoutPage() {
 
   const [copied, setCopied] = useState(false);
 
+  // Manual confirmation: 'code' = direct input, 'message' = full SMS paste
+  const [manualInputMode, setManualInputMode] = useState('code');
   const [transactionCode, setTransactionCode] = useState('');
+  const [mpesaMessage, setMpesaMessage] = useState('');
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [confirmSuccess, setConfirmSuccess] = useState(false);
   const [confirmError, setConfirmError] = useState('');
+  const [extractedCode, setExtractedCode] = useState(null);
+  const [extractedHint, setExtractedHint] = useState(null);
+
 
   const copyToClipboard = (text) => {
     if (navigator.clipboard) {
@@ -41,7 +49,7 @@ export default function CheckoutPage() {
   };
 
   // Poll backend for PayHero payment status confirmation
-  const pollPaymentStatus = (paymentId) => {
+  const pollPaymentStatus = (paymentId, fallbackOrderRef) => {
     let attempts = 0;
     const maxAttempts = 150; // 5 minutes max polling (150 * 2s)
 
@@ -50,32 +58,43 @@ export default function CheckoutPage() {
       try {
         const { paymentApi } = await import('../api/paymentApi');
         const res = await paymentApi.getPaymentStatus(paymentId);
+        setOrderApiResponse(res);
+        // Backend wraps the payload under res.data (not res.payment)
+        const paymentData = res.data;
+        if (res.success && paymentData) {
+          const currentStatus = (paymentData.status || '').toLowerCase();
 
-        if (res.success && res.payment) {
-          const currentStatus = (res.payment.status || '').toLowerCase();
-          
           if (currentStatus === 'paid') {
             clearInterval(interval);
             setStkLoading(false);
             setStkSuccess(true);
-            setPaymentStatusMsg('Payment successful! Your order has been placed.');
+            // Extract orderRef from polled response, fallbackOrderRef, or orderApiResponse
+            const orderRef = paymentData?.orderRef || fallbackOrderRef || orderApiResponse?.data?.orderRef;
+            setPaymentStatusMsg('Payment confirmed! Redirecting to your order tracking page...');
             setTimeout(() => {
-              navigate('/admin?tab=order-management');
-            }, 2000);
+              if (orderRef) {
+                navigate(`/track-order/${orderRef}`);
+              } else {
+                navigate('/');
+              }
+            }, 1200);
           } else if (currentStatus === 'cancelled') {
             clearInterval(interval);
             setStkLoading(false);
             setStkError('M-Pesa payment request was cancelled on your phone.');
+            setPaymentStatusMsg('');
           } else if (currentStatus === 'expired') {
             clearInterval(interval);
             setStkLoading(false);
             setStkError('The payment request expired. Please try initiating a new payment.');
+            setPaymentStatusMsg('');
           } else if (currentStatus === 'failed') {
             clearInterval(interval);
             setStkLoading(false);
-            setStkError(res.payment.failureReason || 'M-Pesa payment could not be completed. Please try again.');
+            setStkError(paymentData.failureReason || 'M-Pesa payment could not be completed. Please try again.');
+            setPaymentStatusMsg('');
           } else {
-            setPaymentStatusMsg('Waiting for M-Pesa confirmation... Please check your phone and complete the payment.');
+            setPaymentStatusMsg('Waiting for M-Pesa confirmation... Please check your phone and enter your PIN.');
           }
         }
       } catch (err) {
@@ -85,7 +104,7 @@ export default function CheckoutPage() {
       if (attempts >= maxAttempts) {
         clearInterval(interval);
         setStkLoading(false);
-        setStkError('Payment confirmation timed out. If you completed payment, please check your order history.');
+        setStkError('Payment confirmation timed out. If you completed payment, please check your order history or track using your M-Pesa code.');
       }
     }, 2000);
   };
@@ -132,6 +151,7 @@ export default function CheckoutPage() {
       }
 
       const createdOrderId = orderRes.data.order._id;
+      const createdOrderRef = orderRes.data.order.orderRef;
 
       // Step 2: Trigger PayHero STK Push via backend endpoint
       const { paymentApi } = await import('../api/paymentApi');
@@ -143,8 +163,8 @@ export default function CheckoutPage() {
 
       if (payRes.success && payRes.data?.paymentId) {
         setPaymentStatusMsg('Check your phone for the M-Pesa prompt and enter your PIN.');
-        // Poll for backend confirmation from PayHero callback
-        pollPaymentStatus(payRes.data.paymentId);
+        // Poll for backend confirmation from PayHero callback and redirect to track order
+        pollPaymentStatus(payRes.data.paymentId, createdOrderRef);
       } else {
         setStkError(payRes.message || 'Unable to send M-Pesa prompt.');
         setStkLoading(false);
@@ -155,14 +175,23 @@ export default function CheckoutPage() {
     }
   };
 
-  // Handle Manual Confirmation via M-Pesa Till Transaction Code
+  // Handle Manual Confirmation — routes to verifyManualPayment (supports both modes)
   const handleConfirmPayment = async (e) => {
     e.preventDefault();
     setConfirmError('');
-    const code = transactionCode.trim().toUpperCase();
+    setExtractedCode(null);
+    setExtractedHint(null);
 
-    if (code.length < 6) {
+    const isMessageMode = manualInputMode === 'message';
+    const code = isMessageMode ? null : transactionCode.trim().toUpperCase();
+    const message = isMessageMode ? mpesaMessage.trim() : null;
+
+    if (!isMessageMode && code.length < 6) {
       setConfirmError('Please enter a valid M-Pesa transaction code (e.g. QKT1234567)');
+      return;
+    }
+    if (isMessageMode && (!message || message.length < 20)) {
+      setConfirmError('Please paste your complete M-Pesa confirmation SMS message.');
       return;
     }
 
@@ -171,19 +200,14 @@ export default function CheckoutPage() {
 
       const activeServiceId = orderData.serviceId || orderData._id;
       if (!activeServiceId) {
-        setConfirmError('No valid MongoDB service selected. Please return to catalog.');
+        setConfirmError('No valid service selected. Please return to catalog.');
         setConfirmLoading(false);
         return;
       }
 
       // Step 1: Create Order in MongoDB if not yet created
       const orderRes = await orderApi.createOrder({
-        items: [
-          {
-            serviceId: activeServiceId,
-            quantity: 1
-          }
-        ],
+        items: [{ serviceId: activeServiceId, quantity: 1 }],
         pickupAddress: { street: 'Main Campus Gate A', city: 'Nairobi' },
         deliveryAddress: { street: orderData.deliveryOption || 'Nairobi', city: 'Nairobi' }
       });
@@ -195,28 +219,64 @@ export default function CheckoutPage() {
       }
 
       const createdOrderId = orderRes.data.order._id;
+      const createdOrderRef = orderRes.data.order.orderRef;
 
-      // Step 2: Confirm Manual Till Payment in MongoDB & create Audit Log
-      const { paymentApi } = await import('../api/paymentApi');
-      const confirmRes = await paymentApi.confirmManualPayment({
+      // Step 2: Verify M-Pesa payment via backend verification service
+      const verifyRes = await paymentApi.verifyManualPayment({
         orderId: createdOrderId,
-        transactionCode: code
+        ...(isMessageMode ? { message } : { transactionCode: code })
       });
 
-      if (confirmRes.success) {
+      const targetRef = verifyRes.orderRef || createdOrderRef;
+
+      if (verifyRes.success && (verifyRes.state === 'CONFIRMED' || verifyRes.state === 'ALREADY_PAID')) {
         setConfirmSuccess(true);
+        setExtractedCode(verifyRes.transactionCode || code);
         setTimeout(() => {
-          navigate('/admin?tab=order-management');
+          navigate(`/track-order/${targetRef}`);
+        }, 1500);
+      } else if (verifyRes.orderRef) {
+        setConfirmSuccess(true);
+        setExtractedCode(verifyRes.transactionCode || code);
+        setTimeout(() => {
+          navigate(`/track-order/${verifyRes.orderRef}`);
         }, 1500);
       } else {
-        setConfirmError(confirmRes.message || 'Failed to verify transaction code.');
+        // Map backend state enum to user-friendly messages
+        const stateMessages = {
+          EXTRACTION_FAILED: `Could not extract a transaction code from your message. ${verifyRes.hint || 'Please check that you pasted the complete M-Pesa SMS.'}`,
+          INVALID_CODE_FORMAT: `"${verifyRes.extractedCode || code}" is not a valid M-Pesa receipt code. Please check and try again.`,
+          AMOUNT_MISMATCH: `Payment amount mismatch. Expected KES ${verifyRes.expected}, message shows KES ${verifyRes.received}. Please confirm you used the correct payment.`,
+          ALREADY_USED: 'This M-Pesa transaction code has already been used for another order.',
+          FORBIDDEN: 'You are not authorized to confirm this order.',
+        };
+        setConfirmError(stateMessages[verifyRes.state] || verifyRes.message || 'Failed to verify transaction code.');
+        if (verifyRes.state === 'EXTRACTION_FAILED' && verifyRes.hint) {
+          setExtractedHint(verifyRes.hint);
+        }
       }
     } catch (err) {
-      setConfirmError(err.response?.data?.message || 'Error processing manual payment confirmation.');
+      const respData = err.response?.data;
+      if (respData?.orderRef) {
+        setConfirmSuccess(true);
+        setExtractedCode(respData.transactionCode || code);
+        setTimeout(() => {
+          navigate(`/track-order/${respData.orderRef}`);
+        }, 1500);
+        return;
+      }
+      const state = respData?.state;
+      const stateMessages = {
+        EXTRACTION_FAILED: respData?.hint || 'Could not extract a code from your message. Please paste the complete M-Pesa SMS.',
+        AMOUNT_MISMATCH: `Amount mismatch: expected KES ${respData?.expected}, message shows KES ${respData?.received}.`,
+        ALREADY_USED: 'This M-Pesa transaction code has already been used for another order.',
+      };
+      setConfirmError(stateMessages[state] || respData?.message || err.message || 'Error processing payment confirmation.');
     } finally {
       setConfirmLoading(false);
     }
   };
+
 
   return (
     <div className="bg-surface font-body-md text-on-surface min-h-screen">
@@ -241,7 +301,7 @@ export default function CheckoutPage() {
       <main className="relative w-full pt-20 bg-surface min-h-screen">
         <div className="flex flex-col w-full pb-safe">
           <div className="px-container-padding-mobile py-bento-gap flex flex-col gap-bento-gap max-w-[600px] mx-auto w-full">
-            
+
             {/* Order Summary Bento */}
             <section className="bg-surface-container-lowest rounded-xl p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
               <div className="flex items-center justify-between mb-4">
@@ -279,7 +339,7 @@ export default function CheckoutPage() {
             {/* M-Pesa Payment Instructions Bento */}
             <section className="bg-surface-container-highest rounded-xl p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)] relative overflow-hidden">
               <div className="absolute -top-10 -right-10 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none"></div>
-              
+
               <div className="flex items-center gap-3 mb-4 relative z-10">
                 <div className="w-10 h-10 rounded-full bg-surface-container-lowest flex items-center justify-center shadow-sm">
                   <span className="material-symbols-outlined text-secondary font-bold" style={{ fontVariationSettings: "'FILL' 1" }}>
@@ -309,16 +369,16 @@ export default function CheckoutPage() {
                 <form onSubmit={handleStkPush} className="flex flex-col gap-3">
                   <h3 className="font-label-md text-label-md text-primary uppercase tracking-wider">
                     Option 1: M-Pesa Express STK Push (Recommended)
+                    {JSON.stringify(orderApiResponse)}
                   </h3>
                   <p className="font-body-sm text-on-surface-variant">
                     Receive an instant payment prompt directly on your phone for Till #{orderData.tillNumber || '8995354'}. Enter your M-Pesa PIN to authorize.
                   </p>
-                  
+
                   <div className="relative group mb-1">
                     <input
-                      className={`w-full bg-[#F1F5F9] rounded-lg px-4 py-4 font-body-md text-on-surface placeholder:text-outline transition-all duration-200 outline-none focus:bg-white focus:ring-1 focus:ring-primary ${
-                        stkError ? 'ring-1 ring-error bg-error-container/20' : ''
-                      }`}
+                      className={`w-full bg-[#F1F5F9] rounded-lg px-4 py-4 font-body-md text-on-surface placeholder:text-outline transition-all duration-200 outline-none focus:bg-white focus:ring-1 focus:ring-primary ${stkError ? 'ring-1 ring-error bg-error-container/20' : ''
+                        }`}
                       id="mpesa-phone"
                       placeholder="e.g. 0712345678"
                       type="tel"
@@ -393,9 +453,8 @@ export default function CheckoutPage() {
                     <button
                       type="button"
                       aria-label="Copy Till Number"
-                      className={`w-10 h-10 rounded-full bg-surface-container hover:bg-surface-variant transition-all flex items-center justify-center ${
-                        copied ? 'scale-110 text-secondary' : 'text-primary'
-                      }`}
+                      className={`w-10 h-10 rounded-full bg-surface-container hover:bg-surface-variant transition-all flex items-center justify-center ${copied ? 'scale-110 text-secondary' : 'text-primary'
+                        }`}
                       onClick={() => copyToClipboard(orderData.tillNumber || '8995354')}
                     >
                       <span className="material-symbols-outlined text-lg">
@@ -414,49 +473,116 @@ export default function CheckoutPage() {
             <section className="bg-surface-container-lowest rounded-xl p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
               <div className="flex flex-col gap-2 mb-4">
                 <h3 className="font-headline-md text-body-lg text-on-surface font-semibold">
-                  Manual Confirmation
+                  Confirm Your Payment
                 </h3>
                 <p className="font-body-sm text-on-surface-variant">
-                  Enter the M-Pesa transaction code received in your SMS to confirm your order.
+                  After paying, confirm using your M-Pesa code or paste the full SMS.
                 </p>
               </div>
 
+              {/* Mode Toggle */}
+              <div className="flex bg-surface-container rounded-lg p-1 gap-1 mb-4">
+                <button
+                  type="button"
+                  id="manual-mode-code"
+                  onClick={() => { setManualInputMode('code'); setConfirmError(''); }}
+                  className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                    manualInputMode === 'code'
+                      ? 'bg-surface-container-lowest shadow-sm text-primary'
+                      : 'text-outline hover:text-on-surface'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-sm">pin</span>
+                  Enter Code
+                </button>
+                <button
+                  type="button"
+                  id="manual-mode-message"
+                  onClick={() => { setManualInputMode('message'); setConfirmError(''); }}
+                  className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                    manualInputMode === 'message'
+                      ? 'bg-surface-container-lowest shadow-sm text-primary'
+                      : 'text-outline hover:text-on-surface'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-sm">sms</span>
+                  Paste SMS
+                </button>
+              </div>
+
               <form onSubmit={handleConfirmPayment} className="flex flex-col gap-4">
-                <div className="relative group">
-                  <input
-                    className={`w-full bg-[#F1F5F9] rounded-lg px-4 py-4 font-body-md text-on-surface placeholder:text-outline transition-all duration-200 outline-none focus:bg-white focus:ring-1 focus:ring-primary uppercase ${
-                      confirmError ? 'ring-1 ring-error bg-error-container/20' : ''
-                    }`}
-                    id="transaction-code"
-                    placeholder="e.g. QKT1234567"
-                    type="text"
-                    value={transactionCode}
-                    onChange={(e) => {
-                      setTransactionCode(e.target.value.toUpperCase());
-                      if (confirmError) setConfirmError('');
-                    }}
-                    required
-                  />
-                  <label
-                    className="absolute left-4 -top-2 bg-surface-container-lowest px-1 font-label-md text-[10px] text-primary opacity-0 group-focus-within:opacity-100 transition-opacity"
-                    htmlFor="transaction-code"
-                  >
-                    Transaction Code
-                  </label>
-                </div>
+
+                {manualInputMode === 'code' ? (
+                  <div className="relative group">
+                    <input
+                      className={`w-full bg-[#F1F5F9] rounded-lg px-4 py-4 font-body-md text-on-surface placeholder:text-outline transition-all duration-200 outline-none focus:bg-white focus:ring-1 focus:ring-primary uppercase font-mono tracking-widest ${confirmError ? 'ring-1 ring-error bg-error-container/20' : ''}`}
+                      id="transaction-code"
+                      placeholder="e.g. QKT1234567"
+                      type="text"
+                      value={transactionCode}
+                      onChange={(e) => {
+                        setTransactionCode(e.target.value.toUpperCase());
+                        if (confirmError) setConfirmError('');
+                      }}
+                      maxLength={12}
+                      autoComplete="off"
+                    />
+                    <label
+                      className="absolute left-4 -top-2 bg-surface-container-lowest px-1 font-label-md text-[10px] text-primary opacity-0 group-focus-within:opacity-100 transition-opacity"
+                      htmlFor="transaction-code"
+                    >
+                      M-Pesa Transaction Code
+                    </label>
+                    <p className="text-xs text-outline mt-1 px-1">
+                      The 10-character code from your M-Pesa confirmation SMS (e.g. QKT1234567)
+                    </p>
+                  </div>
+                ) : (
+                  <div className="relative group">
+                    <textarea
+                      className={`w-full bg-[#F1F5F9] rounded-lg px-4 py-3 font-body-sm text-on-surface placeholder:text-outline transition-all duration-200 outline-none focus:bg-white focus:ring-1 focus:ring-primary resize-none ${confirmError ? 'ring-1 ring-error bg-error-container/20' : ''}`}
+                      id="mpesa-message"
+                      rows={4}
+                      placeholder={"Paste your full M-Pesa SMS here...\n\nExample:\nQKT1234567 Confirmed.\nKsh1,200.00 sent to AURA LAUNDRY\non 15/8/26 at 2:30 PM"}
+                      value={mpesaMessage}
+                      onChange={(e) => {
+                        setMpesaMessage(e.target.value);
+                        if (confirmError) setConfirmError('');
+                      }}
+                    />
+                    <label
+                      className="absolute left-4 -top-2 bg-surface-container-lowest px-1 font-label-md text-[10px] text-primary opacity-0 group-focus-within:opacity-100 transition-opacity"
+                      htmlFor="mpesa-message"
+                    >
+                      Full M-Pesa Confirmation SMS
+                    </label>
+                    <p className="text-xs text-outline mt-1 px-1">
+                      Copy and paste the complete M-Pesa SMS message exactly as received — we'll extract your transaction code automatically.
+                    </p>
+                  </div>
+                )}
 
                 {confirmError && (
-                  <p className="text-xs text-error font-medium px-1">{confirmError}</p>
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
+                    <span className="font-semibold">Error: </span>{confirmError}
+                  </div>
+                )}
+
+                {confirmSuccess && extractedCode && (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-700 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-base text-emerald-600">check_circle</span>
+                    <span>Payment confirmed! Code: <strong className="font-mono">{extractedCode}</strong>. Redirecting to your order...</span>
+                  </div>
                 )}
 
                 <button
                   type="submit"
-                  disabled={confirmLoading}
-                  className={`w-full font-label-md text-body-md py-4 rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 mt-2 ${
-                    confirmSuccess
-                      ? 'bg-secondary text-white'
-                      : 'bg-primary text-on-primary hover:bg-primary/90 hover:shadow-md active:scale-[0.98]'
-                  } disabled:opacity-80 disabled:pointer-events-none`}
+                  id="confirm-payment-btn"
+                  disabled={confirmLoading || confirmSuccess}
+                  className={`w-full font-label-md text-body-md py-4 rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 mt-2 ${confirmSuccess
+                    ? 'bg-secondary text-white'
+                    : 'bg-primary text-on-primary hover:bg-primary/90 hover:shadow-md active:scale-[0.98]'
+                    } disabled:opacity-80 disabled:pointer-events-none`}
                 >
                   {confirmLoading ? (
                     <>
@@ -470,13 +596,14 @@ export default function CheckoutPage() {
                     </>
                   ) : (
                     <>
-                      Confirm Order
+                      {manualInputMode === 'message' ? 'Extract & Confirm' : 'Confirm Payment'}
                       <span className="material-symbols-outlined text-sm">check_circle</span>
                     </>
                   )}
                 </button>
               </form>
             </section>
+
 
             {/* Trust Indicator */}
             <div className="flex items-center justify-center gap-2 mt-4 opacity-70">

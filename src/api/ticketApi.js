@@ -2,6 +2,14 @@ import api from './axios';
 
 export const ticketApi = {
   /**
+   * Fetch ticket metrics and counts
+   */
+  getTicketMetrics: async () => {
+    const response = await api.get('/tickets/metrics');
+    return response.data;
+  },
+
+  /**
    * Fetch support tickets
    */
   getTickets: async (params = {}) => {

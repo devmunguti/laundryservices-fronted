@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { providerApi } from '../api/providerApi';
 import { authApi } from '../api/authApi';
+import ConfirmationModal from '../components/ui/ConfirmationModal';
 
 export default function AdmincleanersManagement() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -8,6 +9,22 @@ export default function AdmincleanersManagement() {
   const [activeFilterTab, setActiveFilterTab] = useState('All');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState(null);
+
+  // Deletion Modal State
+  const [deleteModalCleaner, setDeleteModalCleaner] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // In-app Toast Notification State
+  const [toast, setToast] = useState(null);
+
+  // Auto-dismiss toast after 4.5 seconds
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => {
+      setToast(null);
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   // Pagination State
   const [page, setPage] = useState(1);
@@ -61,15 +78,24 @@ export default function AdmincleanersManagement() {
       setResetSubmitting(true);
       const res = await authApi.resetProviderPassword(resetModalProvider.id, resetTempPassword);
       if (res.success) {
-        alert(res.message || 'Password reset successfully!');
+        setToast({
+          type: 'success',
+          message: res.message || 'Password reset successfully!'
+        });
         setResetModalProvider(null);
         setResetTempPassword('');
       } else {
-        alert(res.message || 'Failed to reset password.');
+        setToast({
+          type: 'error',
+          message: res.message || 'Failed to reset password.'
+        });
       }
     } catch (err) {
       console.error('Failed to reset provider password:', err);
-      alert(err.response?.data?.message || err.message || 'Error resetting password.');
+      setToast({
+        type: 'error',
+        message: err.response?.data?.message || err.message || 'Error resetting password.'
+      });
     } finally {
       setResetSubmitting(false);
     }
@@ -90,7 +116,7 @@ export default function AdmincleanersManagement() {
   };
 
   // Fetch KPI Stats from MongoDB
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const res = await providerApi.getProviderStats();
       if (res.success && res.data) {
@@ -99,7 +125,7 @@ export default function AdmincleanersManagement() {
     } catch (err) {
       console.error('Failed to fetch provider stats:', err);
     }
-  };
+  }, []);
 
   // Fetch cleaners/providers from MongoDB API
   const fetchProviders = useCallback(async () => {
@@ -150,23 +176,30 @@ export default function AdmincleanersManagement() {
 
   useEffect(() => {
     fetchStats();
-  }, []);
-
-  useEffect(() => {
     fetchProviders();
-  }, [fetchProviders]);
+  }, [fetchProviders, fetchStats]);
 
   const handleUpdateStatus = async (id, status) => {
     try {
       const res = await providerApi.updateProviderStatus(id, status);
       if (res.success) {
+        setToast({
+          type: 'success',
+          message: `Cleaner status updated to ${status}.`
+        });
         await Promise.all([fetchProviders(), fetchStats()]);
       } else {
-        alert(res.message || 'Failed to update cleaner status.');
+        setToast({
+          type: 'error',
+          message: res.message || 'Failed to update cleaner status.'
+        });
       }
     } catch (err) {
       console.error('Failed to update provider status:', err);
-      alert(err.response?.data?.message || 'Failed to update cleaner status.');
+      setToast({
+        type: 'error',
+        message: err.response?.data?.message || 'Failed to update cleaner status.'
+      });
     }
   };
 
@@ -174,6 +207,42 @@ export default function AdmincleanersManagement() {
   const handleReject = (id) => handleUpdateStatus(id, 'Rejected');
   const handleSuspend = (id) => handleUpdateStatus(id, 'Suspended');
   const handleRestore = (id) => handleUpdateStatus(id, 'Active');
+
+  // Trigger Confirmation Modal for Deletion
+  const handleDeleteCleaner = (cleaner) => {
+    setDeleteModalCleaner(cleaner);
+  };
+
+  // Execute Deletion from Confirmation Modal
+  const handleConfirmDelete = async () => {
+    if (!deleteModalCleaner) return;
+
+    try {
+      setIsDeleting(true);
+      const res = await providerApi.deleteProvider(deleteModalCleaner.id);
+      if (res.success) {
+        setToast({
+          type: 'success',
+          message: res.message || `Cleaner "${deleteModalCleaner.name}" permanently deleted.`
+        });
+        setDeleteModalCleaner(null);
+        await Promise.all([fetchProviders(), fetchStats()]);
+      } else {
+        setToast({
+          type: 'error',
+          message: res.message || 'Failed to delete cleaner.'
+        });
+      }
+    } catch (err) {
+      console.error('Error deleting cleaner:', err);
+      setToast({
+        type: 'error',
+        message: err.response?.data?.message || 'Error deleting cleaner account.'
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // Submit Handler for Add New Cleaner or Edit Cleaner
   const handleFormSubmit = async (e) => {
@@ -190,6 +259,10 @@ export default function AdmincleanersManagement() {
           phone: newPhone
         });
         if (res.success) {
+          setToast({
+            type: 'success',
+            message: 'Cleaner updated successfully.'
+          });
           await Promise.all([fetchProviders(), fetchStats()]);
         }
       } else {
@@ -203,12 +276,19 @@ export default function AdmincleanersManagement() {
           status: 'Pending'
         });
         if (res.success) {
+          setToast({
+            type: 'success',
+            message: 'Cleaner registered successfully. Pending approval.'
+          });
           await Promise.all([fetchProviders(), fetchStats()]);
         }
       }
     } catch (err) {
       console.error('Error saving provider in MongoDB:', err);
-      alert(err.response?.data?.message || 'Error processing cleaner registration.');
+      setToast({
+        type: 'error',
+        message: err.response?.data?.message || 'Error processing cleaner registration.'
+      });
     } finally {
       setFormSubmitting(false);
     }
@@ -218,111 +298,140 @@ export default function AdmincleanersManagement() {
     setNewOwner('');
     setNewEmail('');
     setNewPhone('');
-    setEditingProvider(null);
+    setNewTemporaryPassword('');
     setIsAddModalOpen(false);
+    setEditingProvider(null);
   };
 
   const handleEditClick = (cleaner) => {
     setEditingProvider(cleaner);
-    setNewBusinessName(cleaner.name);
-    setNewOwner(cleaner.owner);
-    setNewLocation(cleaner.location);
+    setNewBusinessName(cleaner.name || '');
+    setNewOwner(cleaner.owner || '');
+    setNewLocation(cleaner.location || '');
     setNewEmail(cleaner.email || '');
     setNewPhone(cleaner.phone || '');
     setIsAddModalOpen(true);
   };
 
   return (
-    <div className="flex flex-col gap-stack-gap-lg">
-      {/* Header Section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-stack-gap-md bg-surface-container-lowest p-stack-gap-lg rounded-xl shadow-xs border border-surface-container/40">
-        <div className="flex flex-col">
-          <h1 className="font-headline-lg text-on-surface m-0">cleaners Management</h1>
+    <div className="flex flex-col gap-stack-gap-lg font-body-md text-on-surface">
+      {/* Toast Notification Banner */}
+      {toast && (
+        <div
+          className={`p-4 rounded-2xl shadow-md border flex items-center justify-between transition-all duration-300 animate-in fade-in slide-in-from-top-2 ${
+            toast.type === 'success'
+              ? 'bg-[#e6f4ea] border-[#ceead6] text-[#1e8e3e]'
+              : 'bg-rose-50 border-rose-200 text-rose-700'
+          }`}
+        >
+          <div className="flex items-center gap-3 font-medium text-sm">
+            <span
+              className="material-symbols-outlined text-[20px]"
+              style={{ fontVariationSettings: "'FILL' 1" }}
+            >
+              {toast.type === 'success' ? 'check_circle' : 'error'}
+            </span>
+            <span>{toast.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="text-inherit hover:opacity-70 p-1 rounded-lg cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[18px]">close</span>
+          </button>
+        </div>
+      )}
+
+      {/* Page Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="font-headline-lg text-on-surface m-0">Cleaners Management</h1>
           <p className="font-body-md text-on-surface-variant m-0 mt-1">
-            Manage and monitor all laundry service cleaners across the platform.
+            Oversee laundry service providers, approve pending partners, and manage platform listings.
           </p>
         </div>
         <button
+          type="button"
           onClick={() => {
             setEditingProvider(null);
             setNewBusinessName('');
-            setNewOwner('');
             setNewLocation('');
+            setNewOwner('');
             setNewEmail('');
             setNewPhone('');
+            setNewTemporaryPassword('');
             setIsAddModalOpen(true);
           }}
-          className="bg-primary hover:bg-primary-container text-on-primary font-label-md py-3 px-6 rounded-[16px] transition-colors flex items-center gap-2 shadow-md w-full sm:w-auto justify-center group cursor-pointer"
+          className="bg-primary hover:bg-primary-container text-on-primary hover:text-on-primary-container font-label-md px-5 py-2.5 rounded-[8px] flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
         >
-          <span className="material-symbols-outlined text-[20px] transition-transform group-hover:scale-110">
-            add_business
-          </span>
-          Add New cleaners
+          <span className="material-symbols-outlined text-[20px]">add</span> Add New Cleaner
         </button>
       </div>
 
-      {/* Dynamic KPI Analytics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-stack-gap-md">
+      {/* KPI Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-stack-gap-md">
         {/* Total cleaners */}
-        <div
-          onClick={() => handleFilterTabChange('All')}
-          className="bg-surface-container-lowest p-stack-gap-lg rounded-xl shadow-xs border border-surface-container/40 relative overflow-hidden group cursor-pointer hover:border-primary/50 transition-colors"
-        >
-          <div className="absolute -right-4 -top-4 w-24 h-24 bg-primary/5 rounded-full group-hover:scale-150 transition-transform duration-500 pointer-events-none" />
-          <div className="flex justify-between items-start mb-4">
-            <div className="flex flex-col">
-              <span className="font-label-sm text-on-surface-variant uppercase tracking-wider mb-1">Total cleaners</span>
-              <span className="font-headline-xl text-on-surface">{stats.total.toLocaleString()}</span>
-            </div>
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-              <span className="material-symbols-outlined">storefront</span>
+        <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container/40 flex flex-col justify-between shadow-xs">
+          <div className="flex justify-between items-start">
+            <span className="font-label-md text-on-surface-variant font-semibold">Total Cleaners</span>
+            <div className="p-2 rounded-lg bg-surface-container text-primary">
+              <span className="material-symbols-outlined">dry_cleaning</span>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-secondary">
-            <span className="material-symbols-outlined text-[16px]">trending_up</span>
-            <span className="font-label-sm">Live MongoDB records</span>
+          <div className="mt-4">
+            <div className="font-display-md text-on-surface font-bold text-3xl">{stats.total}</div>
+            <div className="flex items-center gap-1 font-body-sm text-secondary mt-1 text-[13px]">
+              <span className="material-symbols-outlined text-[16px]">groups</span> Registered providers
+            </div>
           </div>
         </div>
 
-        {/* Pending Approval */}
-        <div
-          onClick={() => handleFilterTabChange('Pending')}
-          className="bg-surface-container-lowest p-stack-gap-lg rounded-xl shadow-xs border border-surface-container/40 relative overflow-hidden group cursor-pointer hover:border-amber-400 transition-colors"
-        >
-          <div className="absolute -right-4 -top-4 w-24 h-24 bg-secondary-container/5 rounded-full group-hover:scale-150 transition-transform duration-500 pointer-events-none" />
-          <div className="flex justify-between items-start mb-4">
-            <div className="flex flex-col">
-              <span className="font-label-sm text-on-surface-variant uppercase tracking-wider mb-1">Pending Approval</span>
-              <span className="font-headline-xl text-on-surface">{stats.pending}</span>
+        {/* Active Cleaners */}
+        <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container/40 flex flex-col justify-between shadow-xs">
+          <div className="flex justify-between items-start">
+            <span className="font-label-md text-on-surface-variant font-semibold">Active Cleaners</span>
+            <div className="p-2 rounded-lg bg-[#e6f4ea] text-[#1e8e3e]">
+              <span className="material-symbols-outlined">verified</span>
             </div>
-            <div className="w-10 h-10 rounded-full bg-secondary-container/20 flex items-center justify-center text-secondary-container">
+          </div>
+          <div className="mt-4">
+            <div className="font-display-md text-on-surface font-bold text-3xl">{stats.active}</div>
+            <div className="flex items-center gap-1 font-body-sm text-[#1e8e3e] mt-1 text-[13px]">
+              <span className="material-symbols-outlined text-[16px]">check_circle</span> Live on homepage
+            </div>
+          </div>
+        </div>
+
+        {/* Pending Cleaners */}
+        <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container/40 flex flex-col justify-between shadow-xs">
+          <div className="flex justify-between items-start">
+            <span className="font-label-md text-on-surface-variant font-semibold">Pending Approval</span>
+            <div className="p-2 rounded-lg bg-[#fff8e1] text-[#f57f17]">
               <span className="material-symbols-outlined">pending_actions</span>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-on-surface-variant">
-            <span className="material-symbols-outlined text-[16px]">schedule</span>
-            <span className="font-label-sm">Needs action</span>
+          <div className="mt-4">
+            <div className="font-display-md text-on-surface font-bold text-3xl">{stats.pending}</div>
+            <div className="flex items-center gap-1 font-body-sm text-[#f57f17] mt-1 text-[13px]">
+              <span className="material-symbols-outlined text-[16px]">hourglass_top</span> Needs review
+            </div>
           </div>
         </div>
 
-        {/* Suspended */}
-        <div
-          onClick={() => handleFilterTabChange('Suspended')}
-          className="bg-surface-container-lowest p-stack-gap-lg rounded-xl shadow-xs border border-surface-container/40 relative overflow-hidden group cursor-pointer hover:border-rose-400 transition-colors"
-        >
-          <div className="absolute -right-4 -top-4 w-24 h-24 bg-error/5 rounded-full group-hover:scale-150 transition-transform duration-500 pointer-events-none" />
-          <div className="flex justify-between items-start mb-4">
-            <div className="flex flex-col">
-              <span className="font-label-sm text-on-surface-variant uppercase tracking-wider mb-1">Suspended</span>
-              <span className="font-headline-xl text-error">{stats.suspended}</span>
-            </div>
-            <div className="w-10 h-10 rounded-full bg-error/10 flex items-center justify-center text-error">
+        {/* Suspended Cleaners */}
+        <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container/40 flex flex-col justify-between shadow-xs">
+          <div className="flex justify-between items-start">
+            <span className="font-label-md text-on-surface-variant font-semibold">Suspended</span>
+            <div className="p-2 rounded-lg bg-rose-50 text-rose-600">
               <span className="material-symbols-outlined">block</span>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-on-surface-variant">
-            <span className="material-symbols-outlined text-[16px]">gavel</span>
-            <span className="font-label-sm">Under review</span>
+          <div className="mt-4">
+            <div className="font-display-md text-on-surface font-bold text-3xl">{stats.suspended}</div>
+            <div className="flex items-center gap-1 font-body-sm text-rose-600 mt-1 text-[13px]">
+              <span className="material-symbols-outlined text-[16px]">gavel</span> Paused listings
+            </div>
           </div>
         </div>
       </div>
@@ -462,10 +571,10 @@ export default function AdmincleanersManagement() {
                           <div className="font-label-md text-on-surface-variant">--</div>
                         </td>
                         <td className="p-4 text-right">
-                          <div className="flex justify-end gap-2">
+                          <div className="flex justify-end gap-2 items-center">
                             <button
                               onClick={() => handleApprove(p.id)}
-                              className="px-3 py-1.5 rounded-lg bg-[#e6f4ea] text-[#1e8e3e] hover:bg-[#ceead6] font-label-sm transition-colors flex items-center gap-1 cursor-pointer"
+                              className="px-3 py-1.5 rounded-lg bg-[#e6f4ea] text-[#1e8e3e] hover:bg-[#ceead6] font-label-sm transition-colors flex items-center gap-1 cursor-pointer font-semibold"
                             >
                               <span className="material-symbols-outlined text-[16px]">check</span> Approve
                             </button>
@@ -474,6 +583,13 @@ export default function AdmincleanersManagement() {
                               className="px-3 py-1.5 rounded-lg bg-error-container text-on-error-container hover:bg-error/20 font-label-sm transition-colors flex items-center gap-1 cursor-pointer"
                             >
                               <span className="material-symbols-outlined text-[16px]">close</span> Reject
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCleaner(p)}
+                              className="w-8 h-8 rounded-full bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center transition-colors cursor-pointer"
+                              title="Delete Cleaner Permanently"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">delete</span>
                             </button>
                           </div>
                         </td>
@@ -511,12 +627,19 @@ export default function AdmincleanersManagement() {
                           <div className="font-body-sm text-on-surface-variant text-[12px] mt-0.5">Historical</div>
                         </td>
                         <td className="p-4 text-right">
-                          <div className="flex justify-end gap-2">
+                          <div className="flex justify-end gap-2 items-center">
                             <button
                               onClick={() => handleRestore(p.id)}
-                              className="px-3 py-1.5 rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-variant font-label-sm transition-colors flex items-center gap-1 cursor-pointer"
+                              className="px-3 py-1.5 rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-variant font-label-sm transition-colors flex items-center gap-1 cursor-pointer font-semibold"
                             >
                               <span className="material-symbols-outlined text-[16px]">restore</span> Restore
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCleaner(p)}
+                              className="w-8 h-8 rounded-full bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center transition-colors cursor-pointer"
+                              title="Delete Cleaner Permanently"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">delete</span>
                             </button>
                           </div>
                         </td>
@@ -563,7 +686,7 @@ export default function AdmincleanersManagement() {
                         <div className="font-body-sm text-secondary text-[12px] mt-0.5">{p.ordersTrend}</div>
                       </td>
                       <td className="p-4 text-right">
-                        <div className="flex justify-end gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex justify-end gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity items-center">
                           <button
                             onClick={() => handleSuspend(p.id)}
                             className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:bg-surface-variant hover:text-error transition-colors cursor-pointer"
@@ -584,6 +707,13 @@ export default function AdmincleanersManagement() {
                             title="Edit"
                           >
                             <span className="material-symbols-outlined text-[18px]">edit</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCleaner(p)}
+                            className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 hover:bg-rose-100 transition-colors cursor-pointer"
+                            title="Delete Cleaner Permanently"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">delete</span>
                           </button>
                         </div>
                       </td>
@@ -618,8 +748,8 @@ export default function AdmincleanersManagement() {
                     key={pageNum}
                     onClick={() => setPage(pageNum)}
                     className={`w-8 h-8 rounded-lg flex items-center justify-center font-label-sm transition-colors cursor-pointer ${page === pageNum
-                        ? 'bg-primary text-on-primary font-bold'
-                        : 'text-on-surface hover:bg-surface-container'
+                      ? 'bg-primary text-on-primary font-bold'
+                      : 'text-on-surface hover:bg-surface-container'
                       }`}
                   >
                     {pageNum}
@@ -796,6 +926,24 @@ export default function AdmincleanersManagement() {
           </div>
         </div>
       )}
+
+      {/* Reusable System Confirmation Modal for Cleaner Deletion */}
+      <ConfirmationModal
+        isOpen={!!deleteModalCleaner}
+        onClose={() => !isDeleting && setDeleteModalCleaner(null)}
+        onConfirm={handleConfirmDelete}
+        title="Permanent Deletion"
+        subtitle="Irreversible Cleaner Account Deletion"
+        itemName={deleteModalCleaner?.name}
+        warningMessage="This will remove the cleaner account and all associated services, orders, promotions, and listings from the platform."
+        auditNote="Audit logs and system activity records will be preserved."
+        confirmText="Delete Permanently"
+        cancelText="Cancel"
+        type="danger"
+        isLoading={isDeleting}
+        icon="delete_forever"
+      />
     </div>
   );
 }
+

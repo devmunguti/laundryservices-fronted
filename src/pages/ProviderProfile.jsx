@@ -1,23 +1,38 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../hooks/useAuth';
 
 export default function cleanersProfile({ isStandalone = true }) {
+  const { user } = useAuth();
   const [profile, setProfile] = useState({
-    businessName: 'HydroClean Westlands',
-    description: 'Premium dry cleaning and laundry services tailored for the busy professional. We use eco-friendly solvents and guarantee a 24-hour turnaround on most items.',
-    building: 'The Mirage Tower, Ground Floor',
-    street: 'Chiromo Road',
-    location: 'Westlands CBD, Nairobi',
+    businessName: user?.providerDetails?.businessName || user?.fullName || 'Cleaners Business',
+    description: user?.providerDetails?.description || 'Premium laundry and dry cleaning services tailored for busy professionals.',
+    building: 'Ground Floor Hub',
+    street: user?.addresses?.[0]?.street || 'Nairobi Central',
+    location: user?.addresses?.[0]?.city || 'Nairobi',
     turnaround: '24 Hours',
     pickup: true,
     delivery: true,
-    email: 'hello@hydroclean.co.ke',
-    phone: '712 345 678',
+    email: user?.email || '',
+    phone: user?.phone || '',
     hours: {
       monFri: { active: true, open: '08:00', close: '18:00' },
       saturday: { active: true, open: '09:00', close: '14:00' },
       sunday: { active: false, open: '09:00', close: '17:00' },
     }
   });
+
+  useEffect(() => {
+    if (user) {
+      setProfile((prev) => ({
+        ...prev,
+        businessName: user.providerDetails?.businessName || user.fullName || prev.businessName,
+        email: user.email || prev.email,
+        phone: user.phone || prev.phone,
+        street: user.addresses?.[0]?.street || prev.street,
+        location: user.addresses?.[0]?.city || prev.location
+      }));
+    }
+  }, [user]);
 
   const mainContent = (
     <div className="flex flex-col w-full relative font-['Inter'] text-[#1a1c1e]">

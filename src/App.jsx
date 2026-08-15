@@ -6,6 +6,8 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 import Navbar from './components/layout/Navbar';
 import HomePage from './pages/HomePage';
 import CheckoutPage from './pages/CheckoutPage';
+import TrackOrderPage from './pages/TrackOrderPage';
+import ReviewsPage from './pages/ReviewsPage';
 import PortalGateway from './pages/PortalGateway';
 import ProviderPortal from './pages/ProviderPortal';
 import AdminPortal from './pages/AdminPortal';
@@ -48,6 +50,8 @@ function AppContent() {
             }
           />
           <Route path="/checkout" element={<CheckoutPage />} />
+          <Route path="/track-order/:orderRef" element={<TrackOrderPage />} />
+          <Route path="/reviews" element={<ReviewsPage />} />
           <Route path="/login" element={<PortalGateway />} />
           <Route path="/portal" element={<PortalGateway />} />
           <Route
@@ -63,7 +67,7 @@ function AppContent() {
           <Route
             path="/provider"
             element={
-              <ProtectedRoute allowedRoles={['provider', 'admin']}>
+              <ProtectedRoute allowedRoles={['provider', 'cleaner']}>
                 <ProviderPortal />
               </ProtectedRoute>
             }
@@ -72,6 +76,7 @@ function AppContent() {
           <Route path="/provider/dashboard" element={<Navigate to="/provider?tab=dashboard" replace />} />
           <Route path="/provider/orders" element={<Navigate to="/provider?tab=orders" replace />} />
           <Route path="/provider/services" element={<Navigate to="/provider?tab=services" replace />} />
+          <Route path="/provider/promotions" element={<Navigate to="/provider?tab=promotions" replace />} />
           <Route path="/provider/reviews" element={<Navigate to="/provider?tab=reviews" replace />} />
           <Route path="/provider/earnings" element={<Navigate to="/provider?tab=earnings" replace />} />
           <Route path="/provider/payment-channels" element={<Navigate to="/provider?tab=payment-channels" replace />} />
@@ -92,6 +97,7 @@ function AppContent() {
           <Route path="/admin/provider-management" element={<Navigate to="/admin?tab=provider-management" replace />} />
           <Route path="/admin/order-management" element={<Navigate to="/admin?tab=order-management" replace />} />
           <Route path="/admin/ticket-management" element={<Navigate to="/admin?tab=ticket-management" replace />} />
+          <Route path="/admin/promotions-management" element={<Navigate to="/admin?tab=promotions-management" replace />} />
           <Route path="/admin/payment-records" element={<Navigate to="/admin?tab=payment-records" replace />} />
           <Route path="/admin/user-logs" element={<Navigate to="/admin?tab=user-logs" replace />} />
           <Route path="/admin/system-settings" element={<Navigate to="/admin?tab=system-settings" replace />} />

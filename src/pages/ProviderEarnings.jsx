@@ -1,85 +1,181 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { paymentApi } from '../api/paymentApi';
 
-export default function cleanersEarnings({ isStandalone = true, onNavigateTab }) {
+export default function ProviderEarnings({ isStandalone = true, onNavigateTab }) {
   const navigate = useNavigate();
-  const [notified, setNotified] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState({
+    summary: {
+      grossRevenue: 0,
+      platformCommission: 0,
+      netEarnings: 0
+    },
+    payments: []
+  });
 
-  const handleNotifyMe = () => {
-    setNotified(true);
-    setTimeout(() => setNotified(false), 4000);
-  };
+  const fetchEarnings = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await paymentApi.getProviderPayments();
+      if (res.success && res.data) {
+        setData(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to load provider earnings:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchEarnings();
+  }, [fetchEarnings]);
+
+  const summary = data.summary || { grossRevenue: 0, platformCommission: 0, netEarnings: 0 };
+  const payments = data.payments || [];
 
   const mainContent = (
-    <div className="flex flex-col w-full h-full items-center justify-center relative overflow-hidden py-8">
-      {notified && (
-        <div className="absolute top-0 px-4 py-3 bg-[#00a859]/10 border border-[#00a859]/30 text-[#00a859] rounded-2xl font-['Geist'] text-sm font-semibold flex items-center gap-2 z-50 animate-fadeIn">
-          <span className="material-symbols-outlined text-[20px]">notifications_active</span>
-          <span>You will be notified as soon as Earnings Insights goes live!</span>
-        </div>
-      )}
-
-      {/* Decorative Vector Blobs */}
-      <div className="absolute inset-0 w-full h-full pointer-events-none opacity-25">
-        <svg className="absolute top-1/4 left-1/4 w-96 h-96 -ml-48 -mt-48 text-[#00c1fd]" viewBox="0 0 200 200">
-          <path d="M47.7,-57.2C59.4,-48.1,64.9,-30.9,69.5,-13.2C74.1,4.5,77.8,22.7,69.9,35.7C62,48.7,42.5,56.5,23.3,64.4C4.1,72.3,-14.8,80.3,-30.7,76C-46.6,71.7,-59.5,55.1,-67.2,37.3C-74.9,19.5,-77.4,0.5,-73.4,-17.1C-69.4,-34.7,-58.9,-50.9,-44.7,-59.6C-30.5,-68.3,-15.2,-69.5,1.1,-70.8C17.4,-72.1,34.9,-73.5,47.7,-57.2Z" fill="currentColor" transform="translate(100 100) scale(1.2)"></path>
-        </svg>
-        <svg className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] -mr-64 -mb-64 text-[#b7c4ff]" viewBox="0 0 200 200">
-          <path d="M51.9,-61.8C64.4,-51.9,69.8,-32.8,70.5,-14.4C71.2,4,67.2,21.7,58,36C48.8,50.3,34.4,61.2,17.4,66.8C0.4,72.4,-19.2,72.7,-35.1,65.3C-51,57.9,-63.2,42.8,-71.2,25.2C-79.2,7.6,-83,-12.5,-76.3,-29C-69.6,-45.5,-52.4,-58.4,-36.1,-66.2C-19.8,-74,-4.5,-76.7,11,-73.7C26.5,-70.7,40.5,-63.7,51.9,-61.8Z" fill="currentColor" transform="translate(100 100) scale(1)"></path>
-        </svg>
-      </div>
-
-      <div className="relative z-10 flex flex-col items-center justify-center max-w-2xl text-center px-4 py-8">
-        {/* Animated Icon Card */}
-        <div className="relative w-32 h-32 mb-8 animate-[bounce_3s_ease-in-out_infinite]">
-          <div className="absolute inset-0 bg-[#0052ff] rounded-3xl rotate-6 opacity-20 blur-xl"></div>
-          <div className="absolute inset-0 bg-[#e2e2e5] rounded-3xl rotate-12 opacity-40 shadow-xs"></div>
-          <div className="relative w-full h-full bg-white rounded-3xl flex items-center justify-center shadow-md border border-[#c3c5d9]/20">
-            <span className="material-symbols-outlined text-[64px] text-[#003ec7]" style={{ fontVariationSettings: "'FILL' 1" }}>
-              monitoring
-            </span>
-          </div>
-        </div>
-
-        <div className="space-y-4 mb-10">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-[#c2e8ff]/50 rounded-full">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#006688] animate-pulse"></span>
-            <span className="font-['Geist'] text-xs font-semibold text-[#001e2b]">In Development</span>
-          </div>
-
-          <h1 className="font-['Geist'] text-3xl md:text-5xl font-bold text-[#1a1c1e] tracking-tight">
-            Earnings Insights <span className="text-[#0052ff]">Coming Soon</span>
+    <div className="flex flex-col w-full h-full font-['Inter'] text-[#1a1c1e] gap-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#c3c5d9]/20">
+        <div>
+          <h1 className="font-['Geist'] text-3xl md:text-4xl font-bold text-[#1a1c1e] tracking-tight">
+            Earnings &amp; Payouts
           </h1>
-
-          <p className="font-['Inter'] text-base text-[#434656] max-w-xl mx-auto leading-relaxed">
-            We are building a powerful financial dashboard to help you track your revenue, analyze performance trends, and manage payouts with ease. Get ready to take control of your financial growth.
+          <p className="text-base text-[#434656] mt-1">
+            Real-time financial breakdown of your completed customer orders and take-home revenue.
           </p>
         </div>
+        <button
+          onClick={() => onNavigateTab ? onNavigateTab('payment-channels') : navigate('/provider?tab=payment-channels')}
+          className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-xs flex items-center gap-2 cursor-pointer transition-all self-start sm:self-auto"
+        >
+          <span className="material-symbols-outlined text-[18px]">account_balance_wallet</span>
+          <span>Payout Settings</span>
+        </button>
+      </div>
 
-        <div className="flex flex-col sm:flex-row gap-4 items-center w-full justify-center">
-          <button
-            onClick={() => onNavigateTab ? onNavigateTab('dashboard') : navigate('/cleaners/dashboard')}
-            className="w-full sm:w-auto px-8 py-3.5 bg-[#003ec7] text-white font-['Geist'] text-sm font-semibold rounded-full shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-            <span>Back to Dashboard</span>
-          </button>
-
-          <button
-            onClick={handleNotifyMe}
-            className="w-full sm:w-auto px-8 py-3.5 bg-transparent border border-[#003ec7] text-[#003ec7] font-['Geist'] text-sm font-semibold rounded-full flex items-center justify-center gap-2 hover:bg-[#003ec7]/10 transition-colors duration-300 cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[20px]">notifications_active</span>
-            <span>Notify Me When Live</span>
-          </button>
-        </div>
-
-        <div className="mt-14 w-full max-w-md">
-          <div className="h-2.5 w-full bg-[#eeeef0] rounded-full overflow-hidden">
-            <div className="h-full bg-[#0052ff] rounded-full w-3/4 transition-all duration-1000"></div>
+      {/* 3-Card Summary Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        {/* Net Take-Home Earnings */}
+        <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-3xl p-6 shadow-md relative overflow-hidden flex flex-col justify-between h-[160px]">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-blue-100">Net Take-Home Earnings</span>
+              <span className="material-symbols-outlined text-blue-200 text-[22px]">payments</span>
+            </div>
+            <div className="font-['Geist'] text-3xl font-black mt-2 font-mono">
+              KES {summary.netEarnings.toLocaleString()}
+            </div>
           </div>
-          <p className="mt-3 font-['Geist'] text-xs font-semibold text-[#737688] uppercase tracking-wider">75% Complete</p>
+          <div className="text-xs text-blue-100 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span>Available for automated/manual payout</span>
+          </div>
         </div>
+
+        {/* Gross Revenue */}
+        <div className="bg-white rounded-3xl p-6 border border-[#c3c5d9]/30 shadow-xs flex flex-col justify-between h-[160px]">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Gross Processed Revenue</span>
+              <span className="material-symbols-outlined text-slate-400 text-[22px]">trending_up</span>
+            </div>
+            <div className="font-['Geist'] text-3xl font-black mt-2 text-[#1a1c1e] font-mono">
+              KES {summary.grossRevenue.toLocaleString()}
+            </div>
+          </div>
+          <div className="text-xs text-[#434656]">
+            Total value of customer orders assigned to you
+          </div>
+        </div>
+
+        {/* Platform Commission */}
+        <div className="bg-white rounded-3xl p-6 border border-[#c3c5d9]/30 shadow-xs flex flex-col justify-between h-[160px]">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Platform Commission</span>
+              <span className="material-symbols-outlined text-slate-400 text-[22px]">percent</span>
+            </div>
+            <div className="font-['Geist'] text-3xl font-black mt-2 text-rose-600 font-mono">
+              KES {summary.platformCommission.toLocaleString()}
+            </div>
+          </div>
+          <div className="text-xs text-[#434656]">
+            Standard platform service &amp; hosting fee
+          </div>
+        </div>
+      </div>
+
+      {/* Transaction Records Table */}
+      <div className="bg-white rounded-3xl p-6 md:p-8 border border-[#c3c5d9]/30 shadow-xs space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-['Geist'] text-lg font-bold text-[#1a1c1e]">Completed Order Settlements</h3>
+            <p className="text-xs text-[#434656]">Payments processed from your customers</p>
+          </div>
+          <span className="text-xs font-semibold bg-slate-100 text-slate-700 px-3 py-1 rounded-full">
+            {payments.length} Transactions
+          </span>
+        </div>
+
+        {loading ? (
+          <div className="py-12 text-center text-blue-600 flex items-center justify-center gap-2">
+            <span className="material-symbols-outlined animate-spin text-[24px]">sync</span>
+            <span>Loading earnings records...</span>
+          </div>
+        ) : payments.length === 0 ? (
+          <div className="py-12 text-center text-slate-400 text-sm space-y-2">
+            <span className="material-symbols-outlined text-4xl text-slate-300 block mx-auto">receipt_long</span>
+            <p>No settled customer payments found for your cleaner account yet.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-slate-100 text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                  <th className="py-3 px-4">Order Ref</th>
+                  <th className="py-3 px-4">M-Pesa Code</th>
+                  <th className="py-3 px-4">Gross Amount</th>
+                  <th className="py-3 px-4">Commission</th>
+                  <th className="py-3 px-4">Net Payout</th>
+                  <th className="py-3 px-4">Date</th>
+                  <th className="py-3 px-4 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {payments.map((p) => (
+                  <tr key={p._id} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
+                      {p.orderId || `#ORD-${p.order?.slice(-6).toUpperCase()}`}
+                    </td>
+                    <td className="py-3.5 px-4 font-mono text-xs text-blue-700 font-semibold">
+                      {p.transactionId || p.gatewayMeta?.mpesaReceiptNumber || 'M-PESA'}
+                    </td>
+                    <td className="py-3.5 px-4 font-mono text-slate-900">
+                      KES {(p.amount || 0).toLocaleString()}
+                    </td>
+                    <td className="py-3.5 px-4 font-mono text-rose-600 text-xs">
+                      - KES {(p.commissionAmount || 0).toLocaleString()}
+                    </td>
+                    <td className="py-3.5 px-4 font-mono font-bold text-emerald-700">
+                      KES {(p.providerPayoutAmount || p.amount || 0).toLocaleString()}
+                    </td>
+                    <td className="py-3.5 px-4 text-xs text-slate-500">
+                      {new Date(p.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                        {p.status || 'Paid'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

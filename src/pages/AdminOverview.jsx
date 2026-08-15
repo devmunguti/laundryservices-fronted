@@ -1,37 +1,93 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { systemSettingsApi } from '../api/systemSettingsApi';
 
 export default function AdminOverview({ onNavigateTab }) {
   const [timeFilter, setTimeFilter] = useState('This Week');
+  const [loading, setLoading] = useState(true);
 
-  // Chart data mapping based on filter selection
-  const chartData = {
-    'This Week': [
-      { day: 'Mon', count: 120, heightPct: '30%' },
-      { day: 'Tue', count: 250, heightPct: '50%' },
-      { day: 'Wed', count: 400, heightPct: '80%' },
-      { day: 'Thu', count: 300, heightPct: '60%' },
-      { day: 'Fri', count: 380, heightPct: '75%' },
-      { day: 'Sat', count: 450, heightPct: '90%' },
-      { day: 'Sun', count: 520, heightPct: '100%' },
-    ],
-    'Last Week': [
-      { day: 'Mon', count: 110, heightPct: '28%' },
-      { day: 'Tue', count: 210, heightPct: '45%' },
-      { day: 'Wed', count: 350, heightPct: '70%' },
-      { day: 'Thu', count: 290, heightPct: '58%' },
-      { day: 'Fri', count: 360, heightPct: '72%' },
-      { day: 'Sat', count: 410, heightPct: '82%' },
-      { day: 'Sun', count: 480, heightPct: '92%' },
-    ],
-    'This Month': [
-      { day: 'Wk 1', count: 1400, heightPct: '40%' },
-      { day: 'Wk 2', count: 2100, heightPct: '60%' },
-      { day: 'Wk 3', count: 3200, heightPct: '85%' },
-      { day: 'Wk 4', count: 4100, heightPct: '98%' },
-    ],
+  const [metrics, setMetrics] = useState({
+    totalRevenue: 0,
+    revenueFormatted: 'KES 0',
+    revenueGrowth: '+0% vs last mo',
+    activeOrders: 0,
+    activeOrdersGrowth: '+0% vs last week',
+    totalProviders: 0,
+    pendingProviders: 0,
+    ticketsCompletedToday: 0,
+    ticketsGrowth: '+0% vs yesterday',
+    openTickets: 0,
+    chartData: {
+      'This Week': [
+        { day: 'Mon', count: 0, heightPct: '20%' },
+        { day: 'Tue', count: 0, heightPct: '20%' },
+        { day: 'Wed', count: 0, heightPct: '20%' },
+        { day: 'Thu', count: 0, heightPct: '20%' },
+        { day: 'Fri', count: 0, heightPct: '20%' },
+        { day: 'Sat', count: 0, heightPct: '20%' },
+        { day: 'Sun', count: 0, heightPct: '20%' },
+      ],
+      'Last Week': [
+        { day: 'Mon', count: 0, heightPct: '20%' },
+        { day: 'Tue', count: 0, heightPct: '20%' },
+        { day: 'Wed', count: 0, heightPct: '20%' },
+        { day: 'Thu', count: 0, heightPct: '20%' },
+        { day: 'Fri', count: 0, heightPct: '20%' },
+        { day: 'Sat', count: 0, heightPct: '20%' },
+        { day: 'Sun', count: 0, heightPct: '20%' },
+      ],
+      'This Month': [
+        { day: 'Wk 1', count: 0, heightPct: '20%' },
+        { day: 'Wk 2', count: 0, heightPct: '20%' },
+        { day: 'Wk 3', count: 0, heightPct: '20%' },
+        { day: 'Wk 4', count: 0, heightPct: '20%' },
+      ],
+    },
+    activities: []
+  });
+
+  const fetchOverviewMetrics = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await systemSettingsApi.getAdminOverviewMetrics();
+      if (res.success && res.data) {
+        setMetrics(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch admin overview metrics:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchOverviewMetrics();
+  }, [fetchOverviewMetrics]);
+
+  const currentPoints = metrics.chartData?.[timeFilter] || metrics.chartData?.['This Week'] || [];
+  const maxChartCount = Math.max(...currentPoints.map(p => p.count || 0), 10);
+
+  // Dynamic SVG curve generation
+  const pts = currentPoints.map((pt, i, arr) => {
+    const x = arr.length > 1 ? (i / (arr.length - 1)) * 1000 : 500;
+    const countVal = pt.count || 0;
+    const y = 260 - (countVal / maxChartCount) * 200;
+    return { x, y };
+  });
+
+  const getSvgPath = (pointsList) => {
+    if (!pointsList || pointsList.length === 0) return 'M0 260 L1000 260';
+    let path = `M ${pointsList[0].x} ${pointsList[0].y}`;
+    for (let i = 0; i < pointsList.length - 1; i++) {
+      const p0 = pointsList[i];
+      const p1 = pointsList[i + 1];
+      const cx = (p0.x + p1.x) / 2;
+      path += ` C ${cx} ${p0.y}, ${cx} ${p1.y}, ${p1.x} ${p1.y}`;
+    }
+    return path;
   };
 
-  const currentPoints = chartData[timeFilter] || chartData['This Week'];
+  const svgCurve = getSvgPath(pts);
+  const svgFill = `${svgCurve} L 1000 300 L 0 300 Z`;
 
   return (
     <div className="flex flex-col w-full space-y-stack-gap-lg">
@@ -40,7 +96,7 @@ export default function AdminOverview({ onNavigateTab }) {
         <div className="absolute -right-20 -top-20 w-64 h-64 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
         <div>
           <h1 className="font-headline-xl text-on-surface">System Overview</h1>
-          <p className="font-body-md text-on-surface-variant mt-1">Platform performance and health at a glance.</p>
+          <p className="font-body-md text-on-surface-variant mt-1">Platform performance and live operational metrics.</p>
         </div>
         <div className="flex items-center gap-3 bg-surface-container-lowest py-2 px-4 rounded-full shadow-xs">
           <div className="relative flex items-center justify-center w-3 h-3">
@@ -53,62 +109,85 @@ export default function AdminOverview({ onNavigateTab }) {
 
       {/* Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-stack-gap-lg">
-        {/* Metric 1 */}
-        <div className="bg-surface-container-lowest rounded-xl p-stack-gap-lg shadow-xs flex flex-col justify-between group hover:-translate-y-1 transition-transform duration-300 border border-surface-container/40">
+        {/* Metric 1: Total Revenue */}
+        <div
+          onClick={() => onNavigateTab && onNavigateTab('payment-records')}
+          className="bg-surface-container-lowest rounded-xl p-stack-gap-lg shadow-xs flex flex-col justify-between group hover:-translate-y-1 transition-transform duration-300 border border-surface-container/40 cursor-pointer"
+        >
           <div className="flex justify-between items-start mb-4">
             <div className="w-12 h-12 rounded-full bg-primary-container/20 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-on-primary transition-colors">
-              <span class="material-symbols-outlined text-[24px]">account_balance_wallet</span>
+              <span className="material-symbols-outlined text-[24px]">account_balance_wallet</span>
             </div>
-            <span className="bg-surface-container py-1 px-2 rounded-md font-label-sm text-on-surface-variant">+12% vs last mo</span>
+            <span className="bg-surface-container py-1 px-2 rounded-md font-label-sm text-on-surface-variant">
+              {metrics.revenueGrowth}
+            </span>
           </div>
           <div>
             <p className="font-body-sm text-on-surface-variant uppercase tracking-wider mb-1">Total Platform Revenue</p>
-            <h2 className="font-headline-lg text-on-surface">KES 4.2M</h2>
+            <h2 className="font-headline-lg text-on-surface">{metrics.revenueFormatted}</h2>
           </div>
         </div>
 
-        {/* Metric 2 */}
-        <div className="bg-surface-container-lowest rounded-xl p-stack-gap-lg shadow-xs flex flex-col justify-between group hover:-translate-y-1 transition-transform duration-300 border border-surface-container/40">
+        {/* Metric 2: Active Orders */}
+        <div
+          onClick={() => onNavigateTab && onNavigateTab('order-management')}
+          className="bg-surface-container-lowest rounded-xl p-stack-gap-lg shadow-xs flex flex-col justify-between group hover:-translate-y-1 transition-transform duration-300 border border-surface-container/40 cursor-pointer"
+        >
           <div className="flex justify-between items-start mb-4">
             <div className="w-12 h-12 rounded-full bg-secondary-container/20 flex items-center justify-center text-secondary group-hover:bg-secondary group-hover:text-on-secondary transition-colors">
-              <span class="material-symbols-outlined text-[24px]">local_laundry_service</span>
+              <span className="material-symbols-outlined text-[24px]">local_laundry_service</span>
             </div>
-            <span className="bg-surface-container py-1 px-2 rounded-md font-label-sm text-on-surface-variant">+5% vs last week</span>
+            <span className="bg-surface-container py-1 px-2 rounded-md font-label-sm text-on-surface-variant">
+              {metrics.activeOrdersGrowth}
+            </span>
           </div>
           <div>
             <p className="font-body-sm text-on-surface-variant uppercase tracking-wider mb-1">Active Orders</p>
-            <h2 className="font-headline-lg text-on-surface">1,248</h2>
+            <h2 className="font-headline-lg text-on-surface">{metrics.activeOrders.toLocaleString()}</h2>
           </div>
         </div>
 
-        {/* Metric 3 */}
+        {/* Metric 3: Total Cleaners/Providers */}
         <div
           onClick={() => onNavigateTab && onNavigateTab('cleaners-management')}
           className="bg-surface-container-lowest rounded-xl p-stack-gap-lg shadow-xs flex flex-col justify-between group hover:-translate-y-1 transition-transform duration-300 border border-surface-container/40 cursor-pointer"
         >
           <div className="flex justify-between items-start mb-4">
             <div className="w-12 h-12 rounded-full bg-tertiary-container/20 flex items-center justify-center text-tertiary group-hover:bg-tertiary group-hover:text-on-tertiary transition-colors">
-              <span class="material-symbols-outlined text-[24px]">storefront</span>
+              <span className="material-symbols-outlined text-[24px]">storefront</span>
             </div>
-            <span className="bg-amber-100 text-amber-800 dark:bg-amber-950/40 py-1 px-2 rounded-md font-label-sm font-semibold">2 pending</span>
+            {metrics.pendingProviders > 0 ? (
+              <span className="bg-amber-100 text-amber-800 dark:bg-amber-950/40 py-1 px-2 rounded-md font-label-sm font-semibold">
+                {metrics.pendingProviders} pending
+              </span>
+            ) : (
+              <span className="bg-surface-container py-1 px-2 rounded-md font-label-sm text-on-surface-variant">
+                All Verified
+              </span>
+            )}
           </div>
           <div>
-            <p className="font-body-sm text-on-surface-variant uppercase tracking-wider mb-1">Total cleanerss</p>
-            <h2 className="font-headline-lg text-on-surface">86</h2>
+            <p className="font-body-sm text-on-surface-variant uppercase tracking-wider mb-1">Total Cleaners</p>
+            <h2 className="font-headline-lg text-on-surface">{metrics.totalProviders}</h2>
           </div>
         </div>
 
-        {/* Metric 4 */}
-        <div className="bg-surface-container-lowest rounded-xl p-stack-gap-lg shadow-xs flex flex-col justify-between group hover:-translate-y-1 transition-transform duration-300 border border-surface-container/40">
+        {/* Metric 4: Tickets / Delivered Today */}
+        <div
+          onClick={() => onNavigateTab && onNavigateTab('ticket-management')}
+          className="bg-surface-container-lowest rounded-xl p-stack-gap-lg shadow-xs flex flex-col justify-between group hover:-translate-y-1 transition-transform duration-300 border border-surface-container/40 cursor-pointer"
+        >
           <div className="flex justify-between items-start mb-4">
             <div className="w-12 h-12 rounded-full bg-error-container/20 flex items-center justify-center text-error group-hover:bg-error group-hover:text-on-error transition-colors">
-              <span class="material-symbols-outlined text-[24px]">group_add</span>
+              <span className="material-symbols-outlined text-[24px]">confirmation_number</span>
             </div>
-            <span className="bg-surface-container py-1 px-2 rounded-md font-label-sm text-on-surface-variant">+12% vs yesterday</span>
+            <span className="bg-surface-container py-1 px-2 rounded-md font-label-sm text-on-surface-variant">
+              {metrics.ticketsGrowth}
+            </span>
           </div>
           <div>
-            <p className="font-body-sm text-on-surface-variant uppercase tracking-wider mb-1">Tickets Completed Today</p>
-            <h2 className="font-headline-lg text-on-surface">142</h2>
+            <p className="font-body-sm text-on-surface-variant uppercase tracking-wider mb-1">Completed Today</p>
+            <h2 className="font-headline-lg text-on-surface">{metrics.ticketsCompletedToday}</h2>
           </div>
         </div>
       </div>
@@ -120,7 +199,7 @@ export default function AdminOverview({ onNavigateTab }) {
           <div className="p-stack-gap-lg flex justify-between items-center bg-surface-container-low border-b border-surface-container/30">
             <div>
               <h3 className="font-headline-md text-on-surface">Daily Order Volume</h3>
-              <p className="font-body-sm text-on-surface-variant">Last 7 Days (Platform-wide)</p>
+              <p className="font-body-sm text-on-surface-variant">Platform-wide orders ({timeFilter})</p>
             </div>
             <select
               value={timeFilter}
@@ -143,16 +222,14 @@ export default function AdminOverview({ onNavigateTab }) {
               xmlns="http://www.w3.org/2000/svg"
             >
               <path
-                d="M0 250 C 150 200, 250 280, 400 150 C 550 20, 650 180, 800 120 C 900 80, 950 100, 1000 60 L 1000 300 L 0 300 Z"
+                d={svgFill}
                 fill="url(#paint0_linear)"
-                opacity="0.1"
+                opacity="0.12"
               />
               <path
-                className="animate-[dash_3s_ease-out_forwards]"
-                d="M0 250 C 150 200, 250 280, 400 150 C 550 20, 650 180, 800 120 C 900 80, 950 100, 1000 60"
+                className="transition-all duration-500 ease-out"
+                d={svgCurve}
                 stroke="currentColor"
-                strokeDasharray="1500"
-                strokeDashoffset="0"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth="4"
@@ -167,8 +244,8 @@ export default function AdminOverview({ onNavigateTab }) {
 
             {/* Y-Axis Labels */}
             <div className="absolute left-3 top-8 bottom-10 flex flex-col justify-between font-label-sm text-on-surface-variant pointer-events-none">
-              <span>500</span>
-              <span>250</span>
+              <span>{maxChartCount}</span>
+              <span>{Math.round(maxChartCount / 2)}</span>
               <span>0</span>
             </div>
 
@@ -185,8 +262,9 @@ export default function AdminOverview({ onNavigateTab }) {
                 <div
                   key={idx}
                   style={{ height: pt.heightPct }}
-                  className="w-12 bg-transparent hover:bg-primary/10 cursor-pointer rounded-t-md transition-colors relative group"
+                  className="w-12 bg-transparent hover:bg-primary/10 cursor-pointer rounded-t-md transition-colors relative group flex items-end justify-center"
                 >
+                  <div className="w-2.5 h-2.5 rounded-full bg-primary mb-[-5px] shadow-xs group-hover:scale-125 transition-transform" />
                   <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-inverse-surface text-inverse-on-surface px-2.5 py-1 rounded-md text-xs font-medium shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
                     {pt.count} Orders
                   </div>
@@ -204,65 +282,34 @@ export default function AdminOverview({ onNavigateTab }) {
               onClick={() => onNavigateTab && onNavigateTab('user-logs')}
               className="text-primary hover:text-primary-container font-label-md transition-colors cursor-pointer"
             >
-              View All
+              View Logs
             </button>
           </div>
 
-          <div className="p-stack-gap-lg flex-1 overflow-y-auto space-y-6">
-            {/* Activity Item 1 */}
-            <div className="flex gap-4 items-start relative group">
-              <div className="absolute left-[19px] top-10 bottom-[-24px] w-[2px] bg-surface-container group-last:hidden" />
-              <div className="w-10 h-10 rounded-full bg-secondary-container/20 flex items-center justify-center text-secondary shrink-0 z-10 relative">
-                <span class="material-symbols-outlined text-[20px]">assignment_ind</span>
-              </div>
-              <div>
-                <p className="font-body-md text-on-surface">
-                  <span className="font-label-md font-semibold">New cleaners Application</span> received from "FreshPress Kilimani".
-                </p>
-                <p className="font-body-sm text-on-surface-variant mt-1">10 mins ago</p>
-              </div>
-            </div>
-
-            {/* Activity Item 2 */}
-            <div className="flex gap-4 items-start relative group">
-              <div className="absolute left-[19px] top-10 bottom-[-24px] w-[2px] bg-surface-container group-last:hidden" />
-              <div className="w-10 h-10 rounded-full bg-primary-container/20 flex items-center justify-center text-primary shrink-0 z-10 relative">
-                <span class="material-symbols-outlined text-[20px]">check_circle</span>
-              </div>
-              <div>
-                <p className="font-body-md text-on-surface">
-                  <span className="font-label-md font-semibold">Large Order Completed</span> (KES 15,400) by "Wash & Go Westlands".
-                </p>
-                <p className="font-body-sm text-on-surface-variant mt-1">45 mins ago</p>
-              </div>
-            </div>
-
-            {/* Activity Item 3 */}
-            <div className="flex gap-4 items-start relative group">
-              <div className="absolute left-[19px] top-10 bottom-[-24px] w-[2px] bg-surface-container group-last:hidden" />
-              <div className="w-10 h-10 rounded-full bg-error-container/20 flex items-center justify-center text-error shrink-0 z-10 relative">
-                <span class="material-symbols-outlined text-[20px]">warning</span>
-              </div>
-              <div>
-                <p className="font-body-md text-on-surface">
-                  <span className="font-label-md font-semibold">Payment Failed</span> for Order #ORD-88392. Retry scheduled.
-                </p>
-                <p className="font-body-sm text-on-surface-variant mt-1">2 hours ago</p>
-              </div>
-            </div>
-
-            {/* Activity Item 4 */}
-            <div className="flex gap-4 items-start relative group">
-              <div className="w-10 h-10 rounded-full bg-tertiary-container/20 flex items-center justify-center text-tertiary shrink-0 z-10 relative">
-                <span class="material-symbols-outlined text-[20px]">stars</span>
-              </div>
-              <div>
-                <p className="font-body-md text-on-surface">
-                  <span className="font-label-md font-semibold">New Milestone</span>: Platform reached 10,000 total users!
-                </p>
-                <p className="font-body-sm text-on-surface-variant mt-1">5 hours ago</p>
-              </div>
-            </div>
+          <div className="p-stack-gap-lg flex-1 overflow-y-auto space-y-6 max-h-[380px]">
+            {metrics.activities.length === 0 ? (
+              <p className="text-center text-on-surface-variant font-body-sm py-8">
+                {loading ? 'Loading live activity...' : 'No recent system activity recorded.'}
+              </p>
+            ) : (
+              metrics.activities.map((act, index) => (
+                <div key={act.id || index} className="flex gap-4 items-start relative group">
+                  {index !== metrics.activities.length - 1 && (
+                    <div className="absolute left-[19px] top-10 bottom-[-24px] w-[2px] bg-surface-container" />
+                  )}
+                  <div className={`w-10 h-10 rounded-full ${act.iconBg || 'bg-primary-container/20'} flex items-center justify-center ${act.iconColor || 'text-primary'} shrink-0 z-10 relative`}>
+                    <span className="material-symbols-outlined text-[20px]">{act.icon || 'history'}</span>
+                  </div>
+                  <div>
+                    <p className="font-body-md text-on-surface">
+                      <span className="font-label-md font-semibold">{act.title}: </span>
+                      {act.details}
+                    </p>
+                    <p className="font-body-sm text-on-surface-variant mt-1">{act.time}</p>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

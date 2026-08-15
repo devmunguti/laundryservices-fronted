@@ -18,6 +18,7 @@ export default function AdminSystemSettings() {
   // General Settings State
   const [platformName, setPlatformName] = useState('');
   const [supportEmail, setSupportEmail] = useState('');
+  const [adminAlertEmail, setAdminAlertEmail] = useState('');
   const [supportPhone, setSupportPhone] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
 
@@ -53,6 +54,7 @@ export default function AdminSystemSettings() {
     if (settingsData.general) {
       setPlatformName(settingsData.general.platformName || '');
       setSupportEmail(settingsData.general.supportEmail || '');
+      setAdminAlertEmail(settingsData.general.adminAlertEmail || '');
       setSupportPhone(settingsData.general.supportPhone || '');
       setLogoUrl(settingsData.general.logoUrl || '');
     }
@@ -131,6 +133,7 @@ export default function AdminSystemSettings() {
       general: {
         platformName,
         supportEmail,
+        adminAlertEmail,
         supportPhone,
         logoUrl
       },
@@ -322,11 +325,22 @@ export default function AdminSystemSettings() {
                     />
                   </label>
                   <label className="flex flex-col gap-2">
-                    <span className="font-label-sm text-on-surface-variant">Support Email</span>
+                    <span className="font-label-sm text-on-surface-variant">Support Email (Customer Facing)</span>
                     <input
                       type="email"
                       value={supportEmail}
                       onChange={(e) => setSupportEmail(e.target.value)}
+                      placeholder="support@auralaundry.co.ke"
+                      className="bg-surface-container-lowest rounded-lg py-3 px-4 font-body-md text-on-surface outline-none border border-outline-variant focus:border-primary transition-all"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2">
+                    <span className="font-label-sm text-on-surface-variant">Admin Alert Email (Notification Destination)</span>
+                    <input
+                      type="email"
+                      value={adminAlertEmail}
+                      onChange={(e) => setAdminAlertEmail(e.target.value)}
+                      placeholder="admin@auralaundry.co.ke"
                       className="bg-surface-container-lowest rounded-lg py-3 px-4 font-body-md text-on-surface outline-none border border-outline-variant focus:border-primary transition-all"
                     />
                   </label>

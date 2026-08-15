@@ -20,7 +20,7 @@ export default function cleanersServices({ isStandalone = true, onNavigateTab })
   const fetchServices = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await serviceApi.getServices();
+      const res = await serviceApi.getServices({ myServices: 'true' });
       if (res.success && res.data) {
         setServices(res.data);
       }

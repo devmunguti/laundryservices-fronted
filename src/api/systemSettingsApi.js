@@ -10,6 +10,14 @@ export const systemSettingsApi = {
   },
 
   /**
+   * Retrieves complete live overview metrics and stats for Admin Dashboard
+   */
+  getAdminOverviewMetrics: async () => {
+    const response = await api.get('/admin/settings/overview-metrics');
+    return response.data;
+  },
+
+  /**
    * Updates global System Settings (Singleton document)
    */
   updateAdminSettings: async (settingsPayload) => {

@@ -1,18 +1,28 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings } from '../context/SettingsContext';
 
 export default function PortalGateway() {
   const navigate = useNavigate();
-  const { login, register } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { user, isAuthenticated, login, register } = useAuth();
   const { settings } = useSettings();
 
-
-  // Mode: 'provider' or 'admin'
-  const [activePortal, setActivePortal] = useState('provider');
-  // Provider Sub-tab: 'login' or 'register'
+  const tabParam = searchParams.get('portal') || searchParams.get('tab') || searchParams.get('role');
+  const [activePortal, setActivePortal] = useState(tabParam === 'admin' ? 'admin' : 'provider');
   const [providerMode, setProviderMode] = useState('login');
+
+  // If already logged in, automatically redirect directly to the appropriate dashboard
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      if (user.role === 'admin') {
+        navigate('/admin', { replace: true });
+      } else if (user.role === 'provider' || user.role === 'cleaner') {
+        navigate('/provider', { replace: true });
+      }
+    }
+  }, [isAuthenticated, user, navigate]);
 
   // Form states
   const [formData, setFormData] = useState({
@@ -44,6 +54,25 @@ export default function PortalGateway() {
     if (!/[0-9]/.test(pass)) return 'Password must contain at least 1 number.';
     if (!/[^A-Za-z0-9]/.test(pass)) return 'Password must contain at least 1 special character.';
     return null;
+  };
+
+  const redirectByRole = (loggedInUser, requiresPasswordChange) => {
+    if (requiresPasswordChange) {
+      setSuccessMsg('Temporary password detected. Redirecting to password setup...');
+      setTimeout(() => navigate('/force-password-change'), 800);
+      return;
+    }
+
+    if (loggedInUser?.role === 'admin') {
+      setSuccessMsg('Super Admin verified! Redirecting to Admin Command Center...');
+      setTimeout(() => navigate('/admin'), 800);
+    } else if (loggedInUser?.role === 'provider' || loggedInUser?.role === 'cleaner') {
+      setSuccessMsg('Cleaner verified! Redirecting to Provider Portal...');
+      setTimeout(() => navigate('/provider'), 800);
+    } else {
+      setSuccessMsg('Welcome back! Redirecting...');
+      setTimeout(() => navigate('/'), 800);
+    }
   };
 
   const handleProviderSubmit = async (e) => {
@@ -81,10 +110,14 @@ export default function PortalGateway() {
         const res = await register(payload);
 
         if (res && res.success) {
-          setSuccessMsg('Cleaner account registered successfully! Redirecting...');
-          setTimeout(() => {
-            navigate('/provider');
-          }, 1000);
+          if (res.requiresApproval) {
+            setSuccessMsg(res.message || 'Registration submitted! Your account is pending administrator verification before you can access the dashboard.');
+            setProviderMode('login');
+            setFormData(prev => ({ ...prev, password: '', confirmPassword: '' }));
+          } else {
+            setSuccessMsg('Cleaner account registered successfully! Redirecting...');
+            redirectByRole(res.user, res.requiresPasswordChange);
+          }
         }
       } else {
         // Login cleaner / provider
@@ -94,17 +127,7 @@ export default function PortalGateway() {
         });
 
         if (res && res.success) {
-          if (res.requiresPasswordChange) {
-            setSuccessMsg('Temporary password detected. Redirecting to password setup...');
-            setTimeout(() => {
-              navigate('/force-password-change');
-            }, 800);
-          } else {
-            setSuccessMsg('Login successful! Redirecting to Cleaner Dashboard...');
-            setTimeout(() => {
-              navigate('/provider');
-            }, 800);
-          }
+          redirectByRole(res.user, res.requiresPasswordChange);
         }
       }
     } catch (err) {
@@ -128,10 +151,7 @@ export default function PortalGateway() {
       });
 
       if (res && res.success) {
-        setSuccessMsg('Admin verified! Accessing Command Center...');
-        setTimeout(() => {
-          navigate('/admin');
-        }, 800);
+        redirectByRole(res.user, res.requiresPasswordChange);
       }
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Admin authentication failed';

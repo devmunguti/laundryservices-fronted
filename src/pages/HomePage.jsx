@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../context/SettingsContext';
+import { useAuth } from '../hooks/useAuth';
 import { serviceApi } from '../api/serviceApi';
+import { promotionApi } from '../api/promotionApi';
 
 export default function HomePage() {
   const navigate = useNavigate();
   const { settings } = useSettings();
+  const { user, isAuthenticated } = useAuth();
 
   const [activeNav, setActiveNav] = useState('discover');
   const [searchQuery, setSearchQuery] = useState('');
@@ -16,39 +19,68 @@ export default function HomePage() {
   const [loadingServices, setLoadingServices] = useState(true);
   const [servicesError, setServicesError] = useState(null);
 
+  // Featured / Promoted Provider State
+  const [featuredProvider, setFeaturedProvider] = useState(null);
+  const [isPromotedSponsored, setIsPromotedSponsored] = useState(false);
+
   useEffect(() => {
-    const fetchServices = async () => {
+    const fetchServicesAndPromotions = async () => {
       try {
         setLoadingServices(true);
-        const res = await serviceApi.getServices();
-        if (res.success && Array.isArray(res.data)) {
-          setServices(res.data);
-        } else {
-          setServicesError('Unable to load services catalog.');
+        const [servicesRes, promoRes] = await Promise.all([
+          serviceApi.getServices(),
+          promotionApi.getFeaturedProviders().catch(() => ({ success: false }))
+        ]);
+
+        if (servicesRes.success && servicesRes.data) {
+          setServices(servicesRes.data);
+        }
+
+        if (promoRes.success && promoRes.data && promoRes.data.featuredProvider) {
+          setFeaturedProvider(promoRes.data.featuredProvider);
+          setIsPromotedSponsored(true);
         }
       } catch (err) {
-        console.error('Failed to load services:', err);
-        setServicesError('Failed to connect to backend service catalog.');
+        setServicesError('Failed to load available laundry services.');
       } finally {
         setLoadingServices(false);
       }
     };
-    fetchServices();
+
+    fetchServicesAndPromotions();
   }, []);
 
   const toggleFavorite = (serviceId, e) => {
     e.stopPropagation();
-    setFavorites((prev) => ({
+    setFavorites(prev => ({
       ...prev,
-      [serviceId]: !prev[serviceId],
+      [serviceId]: !prev[serviceId]
     }));
   };
 
-  const filteredServices = services.filter((s) =>
-    (s.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (s.category || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (s.description || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Sort services: Promoted partner services appear at the very TOP (#1)
+  const promotedProviderId = featuredProvider?._id || featuredProvider?.id || null;
+
+  const sortedServices = [...services].sort((a, b) => {
+    const aProviderId = (a.provider?._id || a.provider || '').toString();
+    const bProviderId = (b.provider?._id || b.provider || '').toString();
+
+    const aIsPromoted = promotedProviderId && aProviderId === promotedProviderId;
+    const bIsPromoted = promotedProviderId && bProviderId === promotedProviderId;
+
+    if (aIsPromoted && !bIsPromoted) return -1;
+    if (!aIsPromoted && bIsPromoted) return 1;
+    return 0;
+  });
+
+  const filteredServices = sortedServices.filter(service => {
+    const q = searchQuery.toLowerCase();
+    const nameMatch = service.name?.toLowerCase().includes(q);
+    const catMatch = service.category?.toLowerCase().includes(q);
+    const providerMatch = service.provider?.fullName?.toLowerCase().includes(q) ||
+      service.provider?.providerDetails?.businessName?.toLowerCase().includes(q);
+    return nameMatch || catMatch || providerMatch;
+  });
 
   return (
     <div className="bg-background font-body-md text-on-surface min-h-screen">
@@ -79,11 +111,10 @@ export default function HomePage() {
                   key={item.id}
                   type="button"
                   onClick={() => setActiveNav(item.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all group ${
-                    isActive
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all group ${isActive
                       ? 'bg-primary-container text-on-primary-container font-semibold shadow-sm'
                       : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
-                  }`}
+                    }`}
                 >
                   <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
                   <span className="font-label-md text-label-md">{item.label}</span>
@@ -113,22 +144,37 @@ export default function HomePage() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            className="p-2 rounded-full hover:bg-surface-container text-on-surface-variant transition-colors"
-            title="Notifications"
-          >
-            <span className="material-symbols-outlined">notifications</span>
-          </button>
-          <button
-            type="button"
-            className="w-9 h-9 rounded-full bg-primary hover:bg-primary/90 transition-colors flex items-center justify-center text-on-primary shadow-sm"
-            onClick={() => navigate('/login')}
-            title="Access Portal Login"
-          >
-            <span className="material-symbols-outlined text-[20px]">person</span>
-          </button>
+        <div className="flex items-center gap-3">
+          {isAuthenticated && user ? (
+            user.role === 'admin' ? (
+              <button
+                type="button"
+                onClick={() => navigate('/admin')}
+                className="px-4 py-2 rounded-full bg-slate-900 text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">admin_panel_settings</span>
+                <span>Super Admin</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => navigate('/provider')}
+                className="px-4 py-2 rounded-full bg-primary text-on-primary font-semibold text-xs flex items-center gap-1.5 shadow-sm hover:bg-primary/90 transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">dry_cleaning</span>
+                <span>Cleaner Portal</span>
+              </button>
+            )
+          ) : (
+            <button
+              type="button"
+              className="w-9 h-9 rounded-full bg-primary hover:bg-primary/90 transition-colors flex items-center justify-center text-on-primary shadow-sm cursor-pointer"
+              onClick={() => navigate('/login')}
+              title="Access Portal Login"
+            >
+              <span className="material-symbols-outlined text-[20px]">person</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -144,7 +190,7 @@ export default function HomePage() {
               }}
             ></div>
             <div className="absolute inset-0 bg-gradient-to-t from-surface-container/60 to-transparent"></div>
-            
+
             <div className="relative z-10 flex flex-col items-center gap-6 max-w-3xl px-8 w-full">
               <h1 className="font-headline-xl text-headline-xl text-on-surface text-center font-bold">
                 Find the perfect clean, near you.
@@ -166,7 +212,7 @@ export default function HomePage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => {}}
+                  onClick={() => { }}
                   className="bg-primary hover:bg-surface-tint text-on-primary px-6 py-3 rounded-full font-label-md text-label-md transition-colors whitespace-nowrap font-medium"
                 >
                   Search
@@ -210,7 +256,8 @@ export default function HomePage() {
                   </div>
                 ) : (
                   filteredServices.map((service) => {
-                    const providerName = service.provider?.fullName || service.provider?.providerDetails?.businessName || 'Sparkle Partner';
+                    const providerBusinessName = service.provider?.providerDetails?.businessName || service.provider?.fullName || 'Aura Partner Cleaner';
+                    const providerRating = service.provider?.providerDetails?.rating || 5.0;
                     const providerTillNumber = service.provider?.providerDetails?.tillNumber || '8995354';
                     const paymentChannelsCount = service.provider?.providerDetails?.paymentChannels?.length || 0;
                     const hasChannelConfigured = Boolean(
@@ -231,14 +278,20 @@ export default function HomePage() {
                       deliveryPrice: deliveryFee,
                       tillNumber: providerTillNumber,
                       hasChannelConfigured: hasChannelConfigured,
-                      providerName: providerName
+                      providerName: providerBusinessName
                     };
+
+                    const serviceProviderId = (service.provider?._id || service.provider || '').toString();
+                    const isPromotedService = Boolean(promotedProviderId && serviceProviderId === promotedProviderId);
 
                     return (
                       <div
                         key={service._id}
                         onClick={() => navigate('/checkout', { state: checkoutState })}
-                        className="bg-surface-container-lowest rounded-[16px] p-6 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between h-[280px] border border-transparent hover:border-primary/20"
+                        className={`bg-surface-container-lowest rounded-[16px] p-6 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between h-[280px] border ${isPromotedService
+                            ? 'border-blue-500/40 ring-1 ring-blue-500/20 bg-gradient-to-b from-blue-50/20 to-white'
+                            : 'border-transparent hover:border-primary/20'
+                          }`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-4">
@@ -246,12 +299,25 @@ export default function HomePage() {
                               <span className="material-symbols-outlined text-primary text-[24px]">local_laundry_service</span>
                             </div>
                             <div>
-                              <h3 className="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors font-medium">
-                                {service.name}
-                              </h3>
-                              <p className="font-body-sm text-on-surface-variant text-xs font-medium">
-                                Partner: {providerName}
-                              </p>
+                              <div className="flex items-center gap-1.5">
+                                <h3 className="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors font-medium">
+                                  {service.name}
+                                </h3>
+                                {isPromotedService && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 shrink-0">
+                                    <span className="material-symbols-outlined text-[12px]">verified</span>
+                                    Top Partner
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <p className="font-body-sm text-on-surface-variant text-xs font-semibold text-blue-700">
+                                  {providerBusinessName}
+                                </p>
+                                <span className="text-[10px] text-amber-600 font-bold flex items-center gap-0.5 bg-amber-50 px-1.5 py-0.5 rounded">
+                                  ★ {providerRating}
+                                </span>
+                              </div>
                             </div>
                           </div>
                           <button
@@ -308,33 +374,61 @@ export default function HomePage() {
                 <div className="bg-primary text-on-primary rounded-[16px] p-6 shadow-md relative overflow-hidden flex-1 min-h-[280px]">
                   <div className="relative z-10 flex flex-col h-full justify-between">
                     <div>
-                      <span className="px-3 py-1 bg-on-primary/20 backdrop-blur-md rounded-full font-label-md text-label-md text-on-primary inline-block mb-4">
-                        Promoted
-                      </span>
-                      <h3 className="font-headline-lg text-headline-lg mb-2 font-bold">
-                        SpeedyWash
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="px-3 py-1 bg-on-primary/20 backdrop-blur-md rounded-full font-label-md text-label-md text-on-primary inline-flex items-center gap-1.5 font-semibold">
+                          <span className="material-symbols-outlined text-[15px]">verified</span>
+                          {isPromotedSponsored ? 'Featured Cleaner' : 'Top Partner'}
+                        </span>
+                        {featuredProvider?.rating && (
+                          <div className="flex items-center gap-1 bg-black/20 px-2.5 py-1 rounded-full text-xs font-semibold">
+                            <span className="material-symbols-outlined text-amber-300 text-[14px]">star</span>
+                            <span>{featuredProvider.rating}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <h3 className="font-headline-lg text-headline-lg mb-2 font-bold tracking-tight">
+                        {featuredProvider?.businessName || 'Sparkle Cleaners'}
                       </h3>
-                      <p className="font-body-md text-body-md text-on-primary/90 opacity-90">
-                        Same-day pickup and delivery for busy professionals.
+                      <p className="font-body-md text-body-md text-on-primary/90 opacity-90 leading-snug">
+                        {featuredProvider?.tagline || 'Same-day pickup and delivery for busy professionals.'}
                       </p>
+
+                      {featuredProvider?.featuredService && (
+                        <div className="mt-3 bg-white/10 rounded-xl p-2.5 backdrop-blur-xs text-xs">
+                          <span className="opacity-80 block text-[11px] uppercase tracking-wider font-semibold">Popular Service:</span>
+                          <span className="font-bold">{featuredProvider.featuredService.name}</span> — KES {featuredProvider.featuredService.basePrice?.toLocaleString()}
+                        </div>
+                      )}
                     </div>
+
                     <button
                       type="button"
-                      onClick={() =>
+                      onClick={() => {
+                        const s = featuredProvider?.featuredService;
+                        const sId = s?._id || services[0]?._id;
+                        const sName = s?.name || `${featuredProvider?.businessName || 'Featured'} Laundry Service`;
+                        const sPrice = s?.basePrice || 1200;
+                        const deliveryFee = typeof s?.deliveryFee === 'number' ? s.deliveryFee : 200;
+
                         navigate('/checkout', {
                           state: {
-                            serviceName: 'SpeedyWash Express',
-                            details: 'Same-day Pickup & Delivery',
-                            servicePrice: 1800,
-                            deliveryOption: 'Priority Express Zone',
-                            deliveryPrice: 400,
-                            tillNumber: '555 999',
+                            serviceId: sId,
+                            serviceName: sName,
+                            details: s?.description || 'Same-day Pickup & Delivery',
+                            servicePrice: sPrice,
+                            deliveryOption: deliveryFee === 0 ? 'Free Delivery' : 'Priority Express Pickup & Delivery',
+                            deliveryPrice: deliveryFee,
+                            tillNumber: featuredProvider?.tillNumber || '8995354',
+                            providerName: featuredProvider?.businessName || 'Featured Cleaner',
+                            hasChannelConfigured: true
                           },
-                        })
-                      }
-                      className="w-full bg-on-primary text-primary px-4 py-3 rounded-xl font-label-md text-label-md hover:bg-surface-container-lowest transition-colors mt-6 font-semibold"
+                        });
+                      }}
+                      className="w-full bg-on-primary text-primary px-4 py-3 rounded-xl font-label-md text-label-md hover:bg-surface-container-lowest transition-colors mt-6 font-semibold shadow-md flex items-center justify-center gap-2 cursor-pointer"
                     >
-                      Book Now
+                      <span className="material-symbols-outlined text-[18px]">shopping_bag</span>
+                      <span>Book Featured Cleaner</span>
                     </button>
                   </div>
                   <svg

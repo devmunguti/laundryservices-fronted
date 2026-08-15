@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useSettings } from '../context/SettingsContext';
+import { useAuth } from '../hooks/useAuth';
+import { systemSettingsApi } from '../api/systemSettingsApi';
+import { promotionApi } from '../api/promotionApi';
 
 import AdminOverview from './AdminOverview';
 import AdminProviderManagement from './AdminProviderManagement';
@@ -9,15 +12,50 @@ import AdminTicketManagement from './AdminTicketManagement';
 import AdminPaymentRecords from './AdminPaymentRecords';
 import AdminUserLogs from './AdminUserLogs';
 import AdminSystemSettings from './AdminSystemSettings';
+import AdminPromotionsManagement from './AdminPromotionsManagement';
 
 export default function AdminPortal() {
   const { settings } = useSettings();
+  const { logout } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') || 'overview';
   const [activeTab, setActiveTab] = useState(initialTab);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [liveBadges, setLiveBadges] = useState({
+    pendingProviders: 0,
+    openTickets: 0,
+    activeOrders: 0,
+    pendingPromotions: 0
+  });
   const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
+  const fetchBadgeCounts = useCallback(async () => {
+    try {
+      const [res, promoRes] = await Promise.all([
+        systemSettingsApi.getAdminOverviewMetrics().catch(() => ({ success: false })),
+        promotionApi.getAdminPromotions({ status: 'Pending' }).catch(() => ({ success: false }))
+      ]);
+
+      setLiveBadges({
+        pendingProviders: res.success && res.data ? res.data.pendingProviders || 0 : 0,
+        openTickets: res.success && res.data ? res.data.openTickets || 0 : 0,
+        activeOrders: res.success && res.data ? res.data.activeOrders || 0 : 0,
+        pendingPromotions: promoRes.success && promoRes.data ? (promoRes.data.requests?.length || 0) : 0
+      });
+    } catch (e) {
+      // quiet fallback
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBadgeCounts();
+  }, [fetchBadgeCounts, activeTab]);
 
   const handleTabChange = (tabId) => {
     setActiveTab(tabId);
@@ -28,10 +66,11 @@ export default function AdminPortal() {
 
   const navItems = [
     { id: 'overview', label: 'Overview', icon: 'dashboard' },
-    { id: 'order-management', label: 'Order Management', icon: 'receipt_long' },
-    { id: 'ticket-management', label: 'Ticket Management', icon: 'confirmation_number', badge: '146' },
+    { id: 'order-management', label: 'Order Management', icon: 'receipt_long', badge: liveBadges.activeOrders > 0 ? `${liveBadges.activeOrders}` : null },
+    { id: 'ticket-management', label: 'Ticket Management', icon: 'confirmation_number', badge: liveBadges.openTickets > 0 ? `${liveBadges.openTickets}` : null },
     { id: 'system-settings', label: 'System Settings', icon: 'settings' },
-    { id: 'cleaners-management', label: 'cleaners Management', icon: 'dry_cleaning', badge: '2 pending' },
+    { id: 'promotions-management', label: 'Promotions & Featured', icon: 'campaign', badge: liveBadges.pendingPromotions > 0 ? `${liveBadges.pendingPromotions} pending` : null },
+    { id: 'cleaners-management', label: 'Cleaners Management', icon: 'dry_cleaning', badge: liveBadges.pendingProviders > 0 ? `${liveBadges.pendingProviders} pending` : null },
     { id: 'payment-records', label: 'Payment Records', icon: 'payments' },
     { id: 'user-logs', label: 'User Logs', icon: 'history_edu' },
   ];
@@ -111,11 +150,7 @@ export default function AdminPortal() {
         {/* Footer / Sign Out */}
         <div className="p-4 border-t border-surface-container">
           <button
-            onClick={() => {
-              if (window.confirm('Are you sure you want to log out of Admin Portal?')) {
-                navigate('/');
-              }
-            }}
+            onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-error hover:bg-error-container/20 rounded-lg transition-colors cursor-pointer"
           >
             <span className="material-symbols-outlined text-[20px]">logout</span>
@@ -181,6 +216,7 @@ export default function AdminPortal() {
             {activeTab === 'provider-management' && <AdminProviderManagement />}
             {activeTab === 'order-management' && <AdminOrderManagement />}
             {activeTab === 'ticket-management' && <AdminTicketManagement />}
+            {activeTab === 'promotions-management' && <AdminPromotionsManagement />}
             {activeTab === 'payment-records' && <AdminPaymentRecords />}
             {activeTab === 'user-logs' && <AdminUserLogs />}
             {activeTab === 'system-settings' && <AdminSystemSettings />}

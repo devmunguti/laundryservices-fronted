@@ -1,21 +1,42 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { orderApi } from '../api/orderApi';
 import { providerApi } from '../api/providerApi';
+import { systemSettingsApi } from '../api/systemSettingsApi';
 
 export default function AdminOrderManagement() {
   const [activeTab, setActiveTab] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  // Order Details Modal State
+  const [viewingOrder, setViewingOrder] = useState(null);
 
   // Assign Provider Modal State
   const [assigningOrder, setAssigningOrder] = useState(null);
   const [selectedProviderId, setSelectedProviderId] = useState('');
   const [activeProviders, setActiveProviders] = useState([]);
   const [assignSubmitting, setAssignSubmitting] = useState(false);
+
+  // Manual Order State
+  const [newCustomerName, setNewCustomerName] = useState('');
+  const [newCustomerPhone, setNewCustomerPhone] = useState('');
+  const [newcleaners, setNewcleaners] = useState('');
+  const [newServiceType, setNewServiceType] = useState('Standard Wash');
+  const [newAmount, setNewAmount] = useState('1500');
+
+  // Metrics State
+  const [metrics, setMetrics] = useState({
+    activeOrders: 0,
+    activeOrdersGrowth: '+0% vs last week',
+    avgOrderValue: 0,
+    avgOrderValueFormatted: 'KES 0',
+    readyOrders: 0,
+    totalOrders: 0
+  });
 
   const [orders, setOrders] = useState([]);
 
@@ -24,45 +45,70 @@ export default function AdminOrderManagement() {
     try {
       const res = await providerApi.getProviders({ status: 'Active', limit: 50 });
       if (res.success && res.data) {
-        setActiveProviders(res.data.providers || []);
+        const list = res.data.providers || [];
+        setActiveProviders(list);
+        if (list.length > 0) {
+          setNewcleaners(list[0]._id);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch providers for assignment:', err);
     }
   };
 
-  // Fetch real MongoDB orders from Express Backend
-  const fetchOrders = useCallback(async () => {
+  // Fetch live metrics and real MongoDB orders
+  const fetchOrdersAndMetrics = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
       const params = {
-        search: debouncedSearch,
+        search: searchTerm,
         status: activeTab !== 'All' ? activeTab : undefined
       };
 
-      const res = await orderApi.getOrders(params);
-      if (res.success && res.data) {
-        const rawList = res.data.orders || [];
+      const [ordersRes, metricsRes] = await Promise.all([
+        orderApi.getOrders(params),
+        systemSettingsApi.getAdminOverviewMetrics().catch(() => ({ success: false }))
+      ]);
+
+      if (ordersRes.success && ordersRes.data) {
+        const rawList = ordersRes.data.orders || [];
         const formattedOrders = rawList.map((o) => ({
           id: o._id,
           displayId: o.orderRef || `#ORD-${o._id.slice(-6).toUpperCase()}`,
           customer: o.customer?.fullName || 'Guest Customer',
           phone: o.customer?.phone || '+254 700 000 000',
+          address: o.pickupAddress?.street || 'Nairobi',
           avatar: null,
           initials: (o.customer?.fullName || 'GC').split(' ').map(n => n[0]).join('').slice(0, 2),
           initialsBg: 'bg-primary-container text-on-primary-container',
           cleaners: o.provider?.providerDetails?.businessName || o.provider?.fullName || 'Unassigned Cleaner',
           serviceIcon: 'local_laundry_service',
           serviceType: o.items?.[0]?.name || 'Standard Laundry',
+          items: o.items?.map(it => `${it.quantity || 1}x ${it.name || 'Laundry'}`).join(', ') || '1x Laundry Service',
           amount: `KES ${(o.pricing?.grandTotal || o.totalAmount || 0).toLocaleString()}`,
           status: o.status || 'Pending',
-          statusType: (o.status || 'Pending').toLowerCase().replace(' ', '_'),
+          statusType: (o.status || 'Pending').toLowerCase().replace(/_/g, '-'),
+          statusLabel: (o.status || 'Pending').replace(/_/g, ' '),
+          transactionId: o.transactionId || o.payment?.transactionId || null,
+          paymentStatus: o.paymentStatus || o.payment?.status || 'Pending',
+          paymentMethod: o.payment?.method || 'M-Pesa',
+          date: new Date(o.createdAt || Date.now()).toLocaleDateString(),
+          time: new Date(o.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }));
         setOrders(formattedOrders);
-      } else {
-        setError(res.message || 'Failed to load orders.');
+      }
+
+      if (metricsRes.success && metricsRes.data) {
+        setMetrics({
+          activeOrders: metricsRes.data.activeOrders || 0,
+          activeOrdersGrowth: metricsRes.data.activeOrdersGrowth || '+0% vs last week',
+          avgOrderValue: metricsRes.data.avgOrderValue || 0,
+          avgOrderValueFormatted: metricsRes.data.avgOrderValueFormatted || 'KES 0',
+          readyOrders: metricsRes.data.readyOrders || 0,
+          totalOrders: metricsRes.data.totalOrders || 0
+        });
       }
     } catch (err) {
       console.error('Failed to fetch orders from MongoDB:', err);
@@ -70,18 +116,18 @@ export default function AdminOrderManagement() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, activeTab]);
+  }, [searchTerm, activeTab]);
 
   useEffect(() => {
-    fetchOrders();
+    fetchOrdersAndMetrics();
     fetchActiveProviders();
-  }, [fetchOrders]);
+  }, [fetchOrdersAndMetrics]);
 
   const handleUpdateStatus = async (orderId, newStatus) => {
     try {
       const res = await orderApi.updateOrderStatus(orderId, newStatus);
       if (res.success) {
-        await fetchOrders();
+        await fetchOrdersAndMetrics();
       } else {
         alert(res.message || 'Failed to update order status.');
       }
@@ -101,7 +147,7 @@ export default function AdminOrderManagement() {
         alert(res.message || 'Provider assigned successfully!');
         setAssigningOrder(null);
         setSelectedProviderId('');
-        await fetchOrders();
+        await fetchOrdersAndMetrics();
       } else {
         alert(res.message || 'Failed to assign provider.');
       }
@@ -117,33 +163,26 @@ export default function AdminOrderManagement() {
     if (!newCustomerName || !newAmount) return;
 
     try {
-      const res = await fetch('http://localhost:5000/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: [{ name: newServiceType, price: parseFloat(newAmount), quantity: 1 }],
-          pickupAddress: { street: 'Admin Created Address', city: 'Nairobi' }
-        })
+      const res = await orderApi.createOrder({
+        items: [{ name: newServiceType, price: parseFloat(newAmount), quantity: 1 }],
+        pickupAddress: { street: 'Admin Created Order', city: 'Nairobi' }
       });
-      const json = await res.json();
-      if (json.success) {
-        fetchOrders();
+      if (res.success) {
+        await fetchOrdersAndMetrics();
+        setIsManualModalOpen(false);
+        setNewCustomerName('');
+        setNewCustomerPhone('');
+        setNewAmount('1500');
       }
     } catch (err) {
-      console.error('Error creating order in MongoDB:', err);
+      alert(err.response?.data?.message || 'Error creating manual order.');
     }
-
-    setNewCustomerName('');
-    setNewCustomerPhone('');
-    setNewAmount('1500');
-    setIsManualModalOpen(false);
   };
-
 
   const filteredOrders = orders.filter((o) => {
     const matchesTab = activeTab === 'All' || o.status === activeTab;
     const matchesSearch =
-      o.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      o.displayId.toLowerCase().includes(searchTerm.toLowerCase()) ||
       o.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
       o.cleaners.toLowerCase().includes(searchTerm.toLowerCase()) ||
       o.serviceType.toLowerCase().includes(searchTerm.toLowerCase());
@@ -156,7 +195,7 @@ export default function AdminOrderManagement() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-stack-gap-md relative z-10">
         <div className="flex flex-col gap-unit">
           <h1 className="font-headline-xl text-on-surface">Order Management</h1>
-          <p className="font-body-md text-on-surface-variant">Track, filter, and manage all active laundry orders.</p>
+          <p className="font-body-md text-on-surface-variant">Track, filter, and manage all active laundry orders platform-wide.</p>
         </div>
         <button
           onClick={() => setIsManualModalOpen(true)}
@@ -181,9 +220,9 @@ export default function AdminOrderManagement() {
             </div>
           </div>
           <div className="flex items-end gap-3">
-            <span className="font-headline-xl text-on-surface">247</span>
+            <span className="font-headline-xl text-on-surface">{metrics.activeOrders}</span>
             <span className="font-label-sm text-secondary bg-secondary-container/20 px-2 py-1 rounded-full mb-2 flex items-center gap-1">
-              <span className="material-symbols-outlined text-[14px]">trending_up</span> +12%
+              <span className="material-symbols-outlined text-[14px]">trending_up</span> {metrics.activeOrdersGrowth}
             </span>
           </div>
           <div className="w-full h-1 bg-surface-container rounded-full overflow-hidden mt-2">
@@ -200,9 +239,9 @@ export default function AdminOrderManagement() {
             </div>
           </div>
           <div className="flex items-end gap-3">
-            <span className="font-headline-xl text-on-surface">KES 2,450</span>
-            <span className="font-label-sm text-error bg-error-container/20 px-2 py-1 rounded-full mb-2 flex items-center gap-1">
-              <span className="material-symbols-outlined text-[14px]">trending_down</span> -3%
+            <span className="font-headline-xl text-on-surface">{metrics.avgOrderValueFormatted}</span>
+            <span className="font-label-sm text-emerald-700 bg-emerald-100 px-2 py-1 rounded-full mb-2 flex items-center gap-1">
+              <span className="material-symbols-outlined text-[14px]">insights</span> Platform Avg
             </span>
           </div>
           <div className="mt-2 h-[12px] flex gap-1">
@@ -213,42 +252,25 @@ export default function AdminOrderManagement() {
           </div>
         </div>
 
-        {/* Already Delivered Card */}
+        {/* Already Delivered / Ready Card */}
         <div
-          onClick={() => setActiveTab('Ready')}
+          onClick={() => setActiveTab('Ready_For_Delivery')}
           className="bg-surface-container-lowest rounded-2xl p-6 shadow-xs hover:shadow-md transition-all duration-300 flex flex-col gap-4 relative overflow-hidden group border border-surface-container/40 cursor-pointer"
         >
           <div className="flex justify-between items-center">
-            <span className="font-label-md text-on-surface-variant uppercase tracking-wider">Already Delivered</span>
+            <span className="font-label-md text-on-surface-variant uppercase tracking-wider">Ready for Dispatch / Completed</span>
             <div className="w-10 h-10 rounded-full bg-tertiary-container text-on-tertiary-container flex items-center justify-center group-hover:scale-110 transition-transform">
               <span className="material-symbols-outlined text-[20px]">check_circle</span>
             </div>
           </div>
           <div className="flex items-end gap-3">
-            <span className="font-headline-xl text-on-surface">38</span>
+            <span className="font-headline-xl text-on-surface">{metrics.readyOrders}</span>
             <span className="font-label-sm text-tertiary bg-tertiary-container/20 px-2 py-1 rounded-full mb-2">
-              Requires action
+              Ready / Delivered
             </span>
           </div>
-          <div className="flex gap-[-8px] mt-2 relative w-full h-[24px]">
-            <img
-              className="w-8 h-8 rounded-full border-2 border-surface-container-lowest object-cover absolute left-0 z-30"
-              alt="Customer 1"
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuB86oivot4-8ASZPP5FeMdNhmw67c_hFzYQKYkJsLWAcAkdfxaneaR54IxhdnUR0uE13tM2YiNBfLA6J_Rlca0KlR8MrBCa1eloLnSScyxKoJ4WdpZsahK3sDmyp-HUMt-7RfTWSeGRQp4QdQb7IuP9gMMwjqldzqvZ5SGhXDyjQwHLDyWZkaBCxvb-Lx7iYXcFZ3cZHeD2ZKfFRrVvadlZLk--P63W-yVVSj6GxYEE4moJOWlaaewJcw"
-            />
-            <img
-              className="w-8 h-8 rounded-full border-2 border-surface-container-lowest object-cover absolute left-5 z-20"
-              alt="Customer 2"
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuBQDrHowM9Jow_06x4rnt3rF2m1Jux9tcDMdGUO1RqP77TAsiaa8WKDag_Af3FUgYTSje0J4D4c-RPYJy7IiiAuUDVA_YtcNyE2Y-fpL0urGQjHx7KKZ-LXCb-Zk2wMxPAsZK_cQ2Fq-AzL0BgPvJj1TklBlgHHWBaBwKRI4ITR3-a4_F8oOtSWOUL5xwNI-M3BCkBH4AulhU797PqckDjrg1cylcXeXwIJlS3jsxSw6TvW-nO3o_uomw"
-            />
-            <img
-              className="w-8 h-8 rounded-full border-2 border-surface-container-lowest object-cover absolute left-10 z-10"
-              alt="Customer 3"
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuCfdHkIFtL2KW8NNbSH1ksvwuv1mjF-G6gAGKATjExkC2dYf2VZLtrTdHmR6D2aYaIs9nZ-11t-Z0PjLwUNfPUoaCN3mT2iAESUH7tF4HF8dLt_v8wyqyRiPwPBgjOzAr9cInVG4R3WnW5zbWFpA19o7gK0kPN5kzJLoasYo0XYuP4U-3PDT8miykeg12uQJ35Pdr_xhU99R0GebDNLcLk74ED9jUoRrw00Y6XHmHlwAdj_KrKSMlShgQ"
-            />
-            <div className="w-8 h-8 rounded-full border-2 border-surface-container-lowest bg-surface-container flex items-center justify-center font-label-sm text-on-surface-variant absolute left-15 z-0">
-              +35
-            </div>
+          <div className="w-full h-1 bg-surface-container rounded-full overflow-hidden mt-2">
+            <div className="w-[85%] h-full bg-tertiary rounded-full" />
           </div>
         </div>
       </div>
@@ -258,16 +280,24 @@ export default function AdminOrderManagement() {
         {/* Toolbar */}
         <div className="p-6 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-surface-container/30 border-b border-surface-container/40">
           <div className="flex flex-wrap gap-2">
-            {['All', 'Pending', 'In Progress', 'Ready', 'Completed'].map((tab) => (
+            {[
+              { id: 'All', label: 'All Orders' },
+              { id: 'Pending', label: 'Pending / Placed' },
+              { id: 'Pickup_Scheduled', label: 'Pickup Scheduled' },
+              { id: 'In_Wash', label: 'In Wash / Cleaning' },
+              { id: 'Ready_For_Delivery', label: 'Ready for Dispatch' },
+              { id: 'Delivered', label: 'Delivered' },
+              { id: 'Cancelled', label: 'Cancelled' }
+            ].map((tab) => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 rounded-full font-label-md transition-colors cursor-pointer ${activeTab === tab
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2 rounded-full font-label-md transition-colors cursor-pointer text-xs ${activeTab === tab.id
                   ? 'bg-primary text-on-primary shadow-xs font-semibold'
                   : 'bg-surface-container hover:bg-surface-variant text-on-surface-variant'
                   }`}
               >
-                {tab}
+                {tab.label}
               </button>
             ))}
           </div>
@@ -281,121 +311,174 @@ export default function AdminOrderManagement() {
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Filter orders..."
+                placeholder="Search orders, customers..."
                 className="w-full bg-surface py-2 pl-10 pr-4 rounded-xl font-body-sm text-on-surface outline-none border border-outline-variant/30 focus:border-primary focus:ring-1 focus:ring-primary transition-all"
               />
             </div>
-            <button className="p-2 bg-surface rounded-xl border border-outline-variant/30 text-on-surface-variant hover:bg-surface-variant transition-colors flex items-center justify-center cursor-pointer">
-              <span className="material-symbols-outlined text-[20px]">filter_list</span>
-            </button>
           </div>
         </div>
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[750px]">
             <thead>
               <tr className="bg-surface-container/50">
                 <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">Order ID</th>
                 <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">Customer</th>
-                <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">cleaners</th>
+                <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">Assigned Cleaner</th>
                 <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">Service Type</th>
                 <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider text-right">Amount</th>
                 <th className="py-4 px-6 font-label-sm text-on-surface-variant uppercase tracking-wider">Status</th>
-                <th className="py-4 px-6" />
+                <th className="py-4 px-6 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="font-body-sm text-on-surface divide-y divide-surface-container/50">
-              {filteredOrders.map((o) => (
-                <tr key={o.id} className="hover:bg-surface-container/20 transition-colors group">
-                  <td className="py-4 px-6 font-label-md text-primary font-semibold">{o.displayId || o.id}</td>
-                  <td className="py-4 px-6">
-                    <div className="flex items-center gap-3">
-                      {o.avatar ? (
-                        <img className="w-8 h-8 rounded-full object-cover" alt={o.customer} src={o.avatar} />
-                      ) : (
+              {filteredOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-on-surface-variant font-body-sm">
+                    {loading ? 'Loading orders from database...' : 'No orders found matching this filter.'}
+                  </td>
+                </tr>
+              ) : (
+                filteredOrders.map((o) => (
+                  <tr key={o.id} className="hover:bg-surface-container/20 transition-colors group">
+                    <td className="py-4 px-6 font-label-md text-primary font-semibold font-mono">{o.displayId || o.id}</td>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-3">
                         <div className={`w-8 h-8 rounded-full ${o.initialsBg || 'bg-primary-container text-on-primary-container'} flex items-center justify-center font-label-md`}>
                           {o.initials}
                         </div>
+                        <div>
+                          <div className="font-label-md font-medium">{o.customer}</div>
+                          <div className="text-on-surface-variant text-[12px]">{o.phone}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-on-surface-variant font-medium">
+                      <span className={o.cleaners.includes('Unassigned') ? 'text-amber-700 bg-amber-50 px-2 py-0.5 rounded text-xs font-semibold' : 'text-on-surface'}>
+                        {o.cleaners}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[16px] text-tertiary">{o.serviceIcon}</span>
+                        <span>{o.serviceType}</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-right font-label-md font-semibold">{o.amount}</td>
+                    <td className="py-4 px-6">
+                      {o.statusType === 'in-progress' || o.statusType === 'in-wash' ? (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium bg-secondary-container/30 text-on-secondary-container">
+                          <span className="w-1.5 h-1.5 rounded-full bg-secondary mr-1.5" /> In Wash
+                        </span>
+                      ) : o.statusType === 'pending' || o.statusType === 'pickup-scheduled' ? (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium bg-amber-50 text-amber-800">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5" /> {o.statusLabel}
+                        </span>
+                      ) : o.statusType === 'ready-for-delivery' ? (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium bg-blue-50 text-blue-800">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-600 mr-1.5" /> Ready for Delivery
+                        </span>
+                      ) : o.statusType === 'delivered' ? (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium bg-emerald-100 text-emerald-800">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 mr-1.5" /> Delivered
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium bg-error-container/30 text-error">
+                          <span className="w-1.5 h-1.5 rounded-full bg-error mr-1.5" /> {o.statusLabel}
+                        </span>
                       )}
-                      <div>
-                        <div className="font-label-md font-medium">{o.customer}</div>
-                        <div className="text-on-surface-variant text-[12px]">{o.phone}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6 text-on-surface-variant font-medium">{o.cleaners}</td>
-                  <td className="py-4 px-6">
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[16px] text-tertiary">{o.serviceIcon}</span>
-                      <span>{o.serviceType}</span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6 text-right font-label-md font-semibold">{o.amount}</td>
-                  <td className="py-4 px-6">
-                    {o.statusType === 'in_progress' || o.statusType === 'in_wash' ? (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium bg-secondary-container/30 text-on-secondary-container">
-                        <span className="w-1.5 h-1.5 rounded-full bg-secondary mr-1.5" /> {o.status}
-                      </span>
-                    ) : o.statusType === 'pending' ? (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium bg-surface-container text-on-surface-variant">
-                        <span className="w-1.5 h-1.5 rounded-full bg-outline mr-1.5" /> Pending
-                      </span>
-                    ) : o.statusType === 'ready' || o.statusType === 'ready_for_pickup' ? (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium bg-[#10b981]/20 text-[#047857]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#10b981] mr-1.5" /> Ready
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium bg-error-container/30 text-error">
-                        <span className="w-1.5 h-1.5 rounded-full bg-error mr-1.5" /> {o.status}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-4 px-6 text-right relative">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveMenuId(activeMenuId === o.id ? null : o.id);
-                      }}
-                      className="text-on-surface-variant hover:text-primary transition-colors opacity-100 sm:opacity-0 group-hover:opacity-100 p-1 rounded-full cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined text-[20px]">more_vert</span>
-                    </button>
-
-                    {activeMenuId === o.id && (
-                      <div className="absolute right-6 top-10 bg-surface-container-lowest border border-surface-container rounded-lg shadow-lg py-1 w-44 z-30 text-left font-label-sm">
+                    </td>
+                    <td className="py-4 px-6 text-center relative">
+                      <div className="flex items-center justify-center gap-1">
                         <button
-                          onClick={() => {
-                            setAssigningOrder(o);
-                            setActiveMenuId(null);
+                          onClick={() => setViewingOrder(o)}
+                          className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-surface-container rounded-lg transition-colors cursor-pointer"
+                          title="View Order Details & M-Pesa Code"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">visibility</span>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveMenuId(activeMenuId === o.id ? null : o.id);
                           }}
-                          className="w-full px-3 py-1.5 hover:bg-surface-container text-primary text-xs flex items-center gap-2 cursor-pointer font-semibold"
+                          className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-surface-container rounded-lg transition-colors cursor-pointer"
                         >
-                          <span className="material-symbols-outlined text-[16px]">person_add</span> Assign Cleaner
-                        </button>
-                        <button
-                          onClick={() => handleUpdateStatus(o.id, 'In_Wash')}
-                          className="w-full px-3 py-1.5 hover:bg-surface-container text-on-surface text-xs flex items-center gap-2 cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">local_laundry_service</span> Start Wash
-                        </button>
-                        <button
-                          onClick={() => handleUpdateStatus(o.id, 'Ready_For_Delivery')}
-                          className="w-full px-3 py-1.5 hover:bg-surface-container text-on-surface text-xs flex items-center gap-2 cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">check_circle</span> Mark Ready
-                        </button>
-                        <button
-                          onClick={() => handleUpdateStatus(o.id, 'Cancelled')}
-                          className="w-full px-3 py-1.5 hover:bg-surface-container text-rose-600 text-xs flex items-center gap-2 cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">cancel</span> Cancel Order
+                          <span className="material-symbols-outlined text-[18px]">more_vert</span>
                         </button>
                       </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
+
+                      {activeMenuId === o.id && (
+                        <div className="absolute right-6 top-10 bg-surface-container-lowest border border-surface-container rounded-xl shadow-xl py-1 w-52 z-30 text-left font-label-sm">
+                          <div className="px-3 py-2 border-b border-surface-container/40 mb-1 bg-surface-container/30">
+                            <p className="text-[10px] text-on-surface-variant uppercase tracking-wider font-semibold">M-Pesa Code</p>
+                            {o.transactionId ? (
+                              <p className="font-mono text-xs font-bold text-primary mt-0.5">{o.transactionId}</p>
+                            ) : (
+                              <p className="text-xs text-on-surface-variant italic">No code recorded</p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => {
+                              setViewingOrder(o);
+                              setActiveMenuId(null);
+                            }}
+                            className="w-full px-3 py-1.5 hover:bg-surface-container text-on-surface text-xs flex items-center gap-2 cursor-pointer font-medium"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">visibility</span> View Full Details
+                          </button>
+                          <button
+                            onClick={() => {
+                              setAssigningOrder(o);
+                              setActiveMenuId(null);
+                            }}
+                            className="w-full px-3 py-1.5 hover:bg-surface-container text-primary text-xs flex items-center gap-2 cursor-pointer font-semibold"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">person_add</span> Assign Cleaner
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleUpdateStatus(o.id, 'In_Wash');
+                              setActiveMenuId(null);
+                            }}
+                            className="w-full px-3 py-1.5 hover:bg-surface-container text-on-surface text-xs flex items-center gap-2 cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">local_laundry_service</span> Start Wash
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleUpdateStatus(o.id, 'Ready_For_Delivery');
+                              setActiveMenuId(null);
+                            }}
+                            className="w-full px-3 py-1.5 hover:bg-surface-container text-on-surface text-xs flex items-center gap-2 cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">check_circle</span> Mark Ready
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleUpdateStatus(o.id, 'Delivered');
+                              setActiveMenuId(null);
+                            }}
+                            className="w-full px-3 py-1.5 hover:bg-surface-container text-emerald-700 text-xs flex items-center gap-2 cursor-pointer font-medium"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">done_all</span> Mark Delivered
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleUpdateStatus(o.id, 'Cancelled');
+                              setActiveMenuId(null);
+                            }}
+                            className="w-full px-3 py-1.5 hover:bg-surface-container text-rose-600 text-xs flex items-center gap-2 cursor-pointer border-t border-surface-container/30 mt-1"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">cancel</span> Cancel Order
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -403,7 +486,7 @@ export default function AdminOrderManagement() {
         {/* Pagination */}
         <div className="p-4 bg-surface-container/30 border-t border-surface-container/50 flex justify-between items-center">
           <span className="font-body-sm text-on-surface-variant">
-            Showing 1 to {filteredOrders.length} of 247 entries
+            Showing 1 to {filteredOrders.length} of {filteredOrders.length} entries
           </span>
           <div className="flex gap-2">
             <button className="w-8 h-8 rounded-lg bg-surface flex items-center justify-center text-outline-variant cursor-not-allowed border border-outline-variant/30">
@@ -412,19 +495,167 @@ export default function AdminOrderManagement() {
             <button className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-on-primary font-label-sm">
               1
             </button>
-            <button className="w-8 h-8 rounded-lg bg-surface flex items-center justify-center text-on-surface-variant hover:bg-surface-variant transition-colors border border-outline-variant/30 font-label-sm cursor-pointer">
-              2
-            </button>
-            <button className="w-8 h-8 rounded-lg bg-surface flex items-center justify-center text-on-surface-variant hover:bg-surface-variant transition-colors border border-outline-variant/30 font-label-sm cursor-pointer">
-              3
-            </button>
-            <span className="w-8 h-8 flex items-center justify-center text-on-surface-variant">...</span>
             <button className="w-8 h-8 rounded-lg bg-surface flex items-center justify-center text-on-surface-variant hover:bg-surface-variant transition-colors border border-outline-variant/30 cursor-pointer">
               <span className="material-symbols-outlined text-[18px]">chevron_right</span>
             </button>
           </div>
         </div>
       </div>
+
+      {/* Order Details Modal with M-Pesa Transaction Code */}
+      {viewingOrder && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-surface-container-lowest rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative border border-surface-container/60">
+            <button
+              onClick={() => setViewingOrder(null)}
+              className="absolute top-6 right-6 text-on-surface-variant hover:text-on-surface hover:bg-surface-container rounded-full p-1 transition-colors"
+            >
+              <span className="material-symbols-outlined">close</span>
+            </button>
+            <div className="flex items-center gap-3 mb-4">
+              <span className="font-mono text-xl font-bold text-primary">{viewingOrder.displayId}</span>
+              <span className="px-2.5 py-0.5 text-xs rounded-full bg-secondary-container/40 text-on-secondary-container font-semibold uppercase">
+                {viewingOrder.statusLabel}
+              </span>
+            </div>
+            <div className="space-y-3 border-t border-surface-container/40 pt-4 text-sm font-body-sm">
+              <div>
+                <span className="text-xs text-on-surface-variant block">Customer</span>
+                <span className="font-medium text-on-surface">{viewingOrder.customer} ({viewingOrder.phone})</span>
+              </div>
+              <div>
+                <span className="text-xs text-on-surface-variant block">Pickup / Delivery Address</span>
+                <span className="font-medium text-on-surface">{viewingOrder.address}</span>
+              </div>
+              <div>
+                <span className="text-xs text-on-surface-variant block">Assigned Cleaner</span>
+                <span className="font-medium text-on-surface">{viewingOrder.cleaners}</span>
+              </div>
+              <div>
+                <span className="text-xs text-on-surface-variant block">Service Items</span>
+                <span className="font-medium text-on-surface">{viewingOrder.items}</span>
+              </div>
+
+              {/* M-Pesa Transaction Code Highlight */}
+              <div className="bg-surface-container/50 border border-surface-container rounded-xl p-3.5 mt-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs text-on-surface-variant font-semibold uppercase tracking-wider flex items-center gap-1">
+                    <span className="material-symbols-outlined text-emerald-600 text-sm">phone_iphone</span>
+                    M-Pesa Transaction Code
+                  </span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    viewingOrder.paymentStatus === 'Paid'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {viewingOrder.paymentStatus === 'Paid' ? 'Paid' : 'Pending'}
+                  </span>
+                </div>
+                {viewingOrder.transactionId ? (
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="font-mono text-base font-bold text-primary tracking-widest bg-surface px-3 py-1.5 rounded-lg border border-surface-container">
+                      {viewingOrder.transactionId}
+                    </span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard?.writeText(viewingOrder.transactionId);
+                        setCopiedCode(true);
+                        setTimeout(() => setCopiedCode(false), 2000);
+                      }}
+                      className="text-xs bg-primary/10 hover:bg-primary/20 text-primary font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-sm">{copiedCode ? 'check' : 'content_copy'}</span>
+                      <span>{copiedCode ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-xs text-outline-variant italic">No M-Pesa transaction code recorded</span>
+                )}
+              </div>
+
+              <div>
+                <span className="text-xs text-on-surface-variant block">Date & Time</span>
+                <span className="font-medium text-on-surface">{viewingOrder.date} at {viewingOrder.time}</span>
+              </div>
+              <div className="flex justify-between items-center border-t border-surface-container/40 pt-3">
+                <span className="font-semibold text-on-surface">Total Amount:</span>
+                <span className="font-bold text-lg text-primary">{viewingOrder.amount}</span>
+              </div>
+            </div>
+            <div className="mt-6 flex gap-2">
+              <button
+                onClick={() => {
+                  setAssigningOrder(viewingOrder);
+                  setViewingOrder(null);
+                }}
+                className="flex-1 py-2.5 bg-secondary text-on-secondary rounded-full font-label-md hover:bg-secondary/90 transition-colors cursor-pointer"
+              >
+                Assign Cleaner
+              </button>
+              <button
+                onClick={() => setViewingOrder(null)}
+                className="flex-1 py-2.5 bg-primary text-on-primary rounded-full font-label-md hover:bg-primary/90 transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Provider Modal */}
+      {assigningOrder && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-surface-container-lowest rounded-2xl shadow-xl max-w-md w-full p-6 border border-surface-container/60 space-y-4">
+            <div className="flex justify-between items-center border-b border-surface-container/40 pb-3">
+              <h3 className="font-headline-md text-on-surface">Assign Cleaner / Provider</h3>
+              <button
+                onClick={() => setAssigningOrder(null)}
+                className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <p className="font-body-sm text-on-surface-variant">
+              Select an active service provider to fulfill order <strong className="text-primary font-mono">{assigningOrder.displayId}</strong> ({assigningOrder.customer}).
+            </p>
+            <form onSubmit={handleAssignProviderSubmit} className="space-y-4">
+              <div>
+                <label className="block font-label-sm text-on-surface mb-1">Select Active Cleaner</label>
+                <select
+                  value={selectedProviderId}
+                  onChange={(e) => setSelectedProviderId(e.target.value)}
+                  required
+                  className="w-full bg-surface-container py-2.5 px-4 rounded-lg font-body-sm text-on-surface outline-none border border-transparent focus:border-primary"
+                >
+                  <option value="">-- Choose a verified cleaner --</option>
+                  {activeProviders.map((p) => (
+                    <option key={p._id} value={p._id}>
+                      {p.providerDetails?.businessName || p.fullName} ({p.phone || p.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setAssigningOrder(null)}
+                  className="px-4 py-2 rounded-lg font-label-md text-on-surface-variant hover:bg-surface-container cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={assignSubmitting || !selectedProviderId}
+                  className="px-5 py-2 rounded-lg font-label-md bg-primary text-on-primary hover:bg-primary-container shadow-xs disabled:opacity-50 cursor-pointer"
+                >
+                  {assignSubmitting ? 'Assigning...' : 'Confirm Assignment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Manual Order Creation Modal */}
       {isManualModalOpen && (
@@ -462,19 +693,6 @@ export default function AdminOrderManagement() {
                 />
               </div>
               <div>
-                <label className="block font-label-sm text-on-surface mb-1">Assigned cleaners</label>
-                <select
-                  value={newcleaners}
-                  onChange={(e) => setNewcleaners(e.target.value)}
-                  className="w-full bg-surface-container py-2.5 px-4 rounded-lg font-body-sm text-on-surface outline-none border border-transparent focus:border-primary"
-                >
-                  <option value="Sparkle Cleaners Ltd">Sparkle Cleaners Ltd</option>
-                  <option value="Wash & Fold Hub">Wash & Fold Hub</option>
-                  <option value="Pristine Laundry Westlands">Pristine Laundry Westlands</option>
-                  <option value="FreshPress Kilimani">FreshPress Kilimani</option>
-                </select>
-              </div>
-              <div>
                 <label className="block font-label-sm text-on-surface mb-1">Service Type</label>
                 <input
                   type="text"
@@ -499,13 +717,13 @@ export default function AdminOrderManagement() {
                 <button
                   type="button"
                   onClick={() => setIsManualModalOpen(false)}
-                  className="px-4 py-2 rounded-lg font-label-md text-on-surface-variant hover:bg-surface-container"
+                  className="px-4 py-2 rounded-lg font-label-md text-on-surface-variant hover:bg-surface-container cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-lg font-label-md bg-primary text-on-primary hover:bg-primary-container shadow-xs"
+                  className="px-5 py-2 rounded-lg font-label-md bg-primary text-on-primary hover:bg-primary-container shadow-xs cursor-pointer"
                 >
                   Create Order
                 </button>

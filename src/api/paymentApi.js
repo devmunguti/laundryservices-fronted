@@ -113,5 +113,15 @@ export const paymentApi = {
   deleteChannel: async (id) => {
     const response = await api.delete(`/payments/channels/${id}`);
     return response.data;
+  },
+
+  /**
+   * Verify manual M-Pesa payment — accepts either transactionCode or full SMS message
+   * @param {{ orderId: string, transactionCode?: string, message?: string }} data
+   */
+  verifyManualPayment: async (data) => {
+    const response = await api.post('/payments/verify-manual', data);
+    return response.data;
   }
 };
+
