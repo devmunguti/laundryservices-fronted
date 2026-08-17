@@ -55,5 +55,21 @@ export const orderApi = {
   getOrderTracking: async (orderRef) => {
     const response = await api.get(`/orders/track/${orderRef}`);
     return response.data;
+  },
+
+  /**
+   * Update real-time GPS live location / directions for an active order
+   */
+  updateOrderLiveLocation: async (orderRef, locationData) => {
+    const response = await api.patch(`/orders/track/${orderRef}/live-location`, locationData);
+    return response.data;
+  },
+
+  /**
+   * Provider/Driver streams real-time moving coordinates during live navigation
+   */
+  updateProviderLiveLocation: async (orderIdOrRef, locationData) => {
+    const response = await api.patch(`/orders/track/${orderIdOrRef}/provider-location`, locationData);
+    return response.data;
   }
 };

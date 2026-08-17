@@ -9,10 +9,12 @@ export default function ReviewsPage() {
   const [providers, setProviders] = useState([]);
   const [error, setError] = useState(null);
 
-  // Filter States
+  // Filter & Sort States
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedMinRating, setSelectedMinRating] = useState('All');
+  const [selectedSort, setSelectedSort] = useState('rating_desc');
+  const [selectedPriceFilter, setSelectedPriceFilter] = useState('All');
   const [expandedServices, setExpandedServices] = useState({});
 
   // Quick Review Modal State
@@ -26,6 +28,9 @@ export default function ReviewsPage() {
       const params = {
         category: selectedCategory !== 'All' ? selectedCategory : undefined,
         minRating: selectedMinRating !== 'All' ? selectedMinRating : undefined,
+        sort: selectedSort,
+        priceMax: selectedPriceFilter === 'budget' ? 300 : selectedPriceFilter === 'standard' ? 800 : undefined,
+        priceMin: selectedPriceFilter === 'standard' ? 300 : selectedPriceFilter === 'premium' ? 800 : undefined,
         search: searchQuery || undefined
       };
 
@@ -41,7 +46,7 @@ export default function ReviewsPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedCategory, selectedMinRating, searchQuery]);
+  }, [selectedCategory, selectedMinRating, selectedSort, selectedPriceFilter, searchQuery]);
 
   useEffect(() => {
     fetchDirectory();
@@ -52,6 +57,14 @@ export default function ReviewsPage() {
       ...prev,
       [providerId]: !prev[providerId]
     }));
+  };
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setSelectedCategory('All');
+    setSelectedMinRating('All');
+    setSelectedSort('rating_desc');
+    setSelectedPriceFilter('All');
   };
 
   const handleBookService = (provider, service) => {
@@ -77,13 +90,29 @@ export default function ReviewsPage() {
     }
   };
 
-  const categories = ['All', 'Wash & Fold', 'Dry Cleaning', 'Bedding & Linens', 'Ironing & Pressing'];
+  const categories = ['All', 'Wash & Fold', 'Dry Cleaning', 'Bedding & Linens', 'Ironing & Pressing', 'Duvet Care'];
+
+  const sortOptions = [
+    { id: 'rating_desc', label: '⭐ Highest Rated (5★ First)', icon: 'star' },
+    { id: 'cheap', label: '🏷️ Cheapest First (Low Price)', icon: 'payments' },
+    { id: 'reviews_desc', label: '💬 Most Reviewed', icon: 'forum' },
+    { id: 'price_desc', label: '💎 Premium / High Price', icon: 'diamond' }
+  ];
+
+  const priceFilterOptions = [
+    { id: 'All', label: 'All Prices' },
+    { id: 'budget', label: 'Under KES 300 (Budget / Cheap)' },
+    { id: 'standard', label: 'KES 300 - KES 800 (Standard)' },
+    { id: 'premium', label: 'KES 800+ (Premium)' }
+  ];
+
+  const hasActiveFilters = searchQuery || selectedCategory !== 'All' || selectedMinRating !== 'All' || selectedSort !== 'rating_desc' || selectedPriceFilter !== 'All';
 
   return (
     <div className="bg-[#f9f9fc] min-h-screen text-[#1a1c1e] font-['Inter'] flex flex-col">
       <Navbar />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
         {/* Hero Section */}
         <div className="relative rounded-3xl bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-8 md:p-12 shadow-xl overflow-hidden">
           <div className="absolute right-0 top-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -91,7 +120,7 @@ export default function ReviewsPage() {
           <div className="relative z-10 max-w-3xl space-y-4">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-md text-amber-300 text-xs font-bold uppercase tracking-wider">
               <span className="material-symbols-outlined text-[16px]">verified</span>
-              <span>Real Verified Client Ratings</span>
+              <span>Real Verified Client Ratings &amp; Pricing</span>
             </div>
 
             <h1 className="text-3xl sm:text-4xl md:text-5xl font-black font-['Geist'] tracking-tight text-white leading-tight">
@@ -99,7 +128,7 @@ export default function ReviewsPage() {
             </h1>
 
             <p className="text-blue-100/90 text-sm sm:text-base leading-relaxed max-w-2xl">
-              Compare top laundry partners in Nairobi based on real customer feedback, transparent ratings, and explore the complete catalog of cleaning services each provider offers.
+              Discover top-rated laundry partners arranged by transparent 5-star ratings or filter by who is cheapest and most affordable in your area.
             </p>
 
             {/* Quick Order Review Input */}
@@ -124,54 +153,112 @@ export default function ReviewsPage() {
           </div>
         </div>
 
-        {/* Search & Filter Controls */}
-        <div className="bg-white rounded-3xl p-6 shadow-xs border border-[#c3c5d9]/30 space-y-4">
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+        {/* Search & Comprehensive Filter Controls */}
+        <div className="bg-white rounded-3xl p-6 md:p-8 shadow-xs border border-[#c3c5d9]/30 space-y-6">
+          {/* Top Row: Search & Dropdowns */}
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
             {/* Search Input */}
-            <div className="relative flex-1 max-w-md">
+            <div className="relative flex-1 max-w-lg">
               <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">
                 search
               </span>
               <input
                 type="text"
-                placeholder="Search cleaner name, location, or service..."
+                placeholder="Search cleaner name, location, service, or pricing..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-slate-50 py-3 pl-10 pr-4 rounded-2xl text-sm border border-slate-200 outline-none focus:border-blue-600 focus:bg-white transition-all"
               />
             </div>
 
-            {/* Rating Filter Dropdown */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500 shrink-0">Filter by Rating:</span>
-              <select
-                value={selectedMinRating}
-                onChange={(e) => setSelectedMinRating(e.target.value)}
-                className="bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold py-2.5 px-3 rounded-xl outline-none focus:border-blue-600 cursor-pointer"
-              >
-                <option value="All">All Ratings</option>
-                <option value="4.8">4.8+ Stars</option>
-                <option value="4.5">4.5+ Stars</option>
-                <option value="4.0">4.0+ Stars</option>
-              </select>
+            {/* Quick Sorting Dropdown & Rating Filter */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-500 shrink-0">Sort By:</span>
+                <select
+                  value={selectedSort}
+                  onChange={(e) => setSelectedSort(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold py-2.5 px-3 rounded-xl outline-none focus:border-blue-600 cursor-pointer"
+                >
+                  <option value="rating_desc">⭐ 5★ Top Rated First</option>
+                  <option value="cheap">🏷️ Cheapest / Low Price First</option>
+                  <option value="reviews_desc">💬 Most Reviewed</option>
+                  <option value="price_desc">💎 Premium / High Price</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-500 shrink-0">Min Rating:</span>
+                <select
+                  value={selectedMinRating}
+                  onChange={(e) => setSelectedMinRating(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold py-2.5 px-3 rounded-xl outline-none focus:border-blue-600 cursor-pointer"
+                >
+                  <option value="All">All Ratings</option>
+                  <option value="5.0">5.0 Stars (Perfect)</option>
+                  <option value="4.8">4.8+ Stars</option>
+                  <option value="4.5">4.5+ Stars</option>
+                  <option value="4.0">4.0+ Stars</option>
+                </select>
+              </div>
+
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="text-xs font-bold text-rose-600 hover:text-rose-700 px-3 py-2 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors flex items-center gap-1 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[14px]">clear_all</span>
+                  <span>Reset</span>
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Service Category Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                  selectedCategory === cat
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
+          {/* Quick Sort / Filter Buttons */}
+          <div className="space-y-3 pt-2 border-t border-slate-100">
+            {/* Price Filter Pill Buttons */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1 flex items-center gap-1">
+                <span className="material-symbols-outlined text-[14px]">payments</span>
+                <span>Price:</span>
+              </span>
+              {priceFilterOptions.map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => setSelectedPriceFilter(opt.id)}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                    selectedPriceFilter === opt.id
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                  }`}
+                >
+                  {opt.id === 'budget' && <span className="material-symbols-outlined text-[14px]">savings</span>}
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Category Filter Pills */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1 flex items-center gap-1">
+                <span className="material-symbols-outlined text-[14px]">category</span>
+                <span>Category:</span>
+              </span>
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                    selectedCategory === cat
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -258,6 +345,15 @@ export default function ReviewsPage() {
                             <span className="material-symbols-outlined text-[16px] text-slate-400">local_laundry_service</span>
                             <span>{provider.totalServicesCount} Services</span>
                           </span>
+                          {provider.minPrice > 0 && (
+                            <>
+                              <span>•</span>
+                              <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                                <span className="material-symbols-outlined text-[14px]">payments</span>
+                                <span>{provider.startingPriceFormatted}</span>
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

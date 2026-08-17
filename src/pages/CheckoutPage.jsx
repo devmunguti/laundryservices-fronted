@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { orderApi } from '../api/orderApi';
 import { paymentApi } from '../api/paymentApi';
+import { systemSettingsApi } from '../api/systemSettingsApi';
+import { useAuth } from '../hooks/useAuth';
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
 
   // Retrieve order details if passed via navigation state, or fallback to defaults
   const orderData = location.state || {
@@ -14,14 +17,42 @@ export default function CheckoutPage() {
     servicePrice: 1200,
     deliveryOption: 'Student Campus Zone',
     deliveryPrice: 200,
-    tillNumber: '555 123',
+    tillNumber: '8995354',
   };
 
   const totalAmount = orderData.servicePrice + orderData.deliveryPrice;
 
   // Form states
+  const [activeOrder, setActiveOrder] = useState(null);
   const [orderApiResponse, setOrderApiResponse] = useState(null);
-  const [phone, setPhone] = useState('');
+
+  // Client Details Form State
+  const [clientName, setClientName] = useState(user?.fullName || '');
+  const [clientPhone, setClientPhone] = useState(user?.phone || '');
+  const [clientEmail, setClientEmail] = useState(user?.email || '');
+
+  // Campus Pickup & House Location State
+  const [campusLocations, setCampusLocations] = useState([
+    {
+      name: 'Custom House / Apartment Address',
+      zone: 'Off-Campus',
+      description: 'Provide custom building name and room number',
+      instructions: ''
+    }
+  ]);
+  const [selectedCampusLocation, setSelectedCampusLocation] = useState('');
+  const [customStreet, setCustomStreet] = useState('');
+  const [houseNumber, setHouseNumber] = useState('');
+  const [pickupInstructions, setPickupInstructions] = useState('');
+
+  // Live GPS Location Pin State
+  const [gpsCoords, setGpsCoords] = useState(null);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsError, setGpsError] = useState('');
+  const [gpsLocked, setGpsLocked] = useState(false);
+
+  // Payment states
+  const [phone, setPhone] = useState(user?.phone || '');
   const [paymentStatusMsg, setPaymentStatusMsg] = useState('');
   const [stkLoading, setStkLoading] = useState(false);
   const [stkSuccess, setStkSuccess] = useState(false);
@@ -39,6 +70,79 @@ export default function CheckoutPage() {
   const [extractedCode, setExtractedCode] = useState(null);
   const [extractedHint, setExtractedHint] = useState(null);
 
+  // Fetch live campus locations dynamically from backend settings
+  useEffect(() => {
+    const fetchCampusLocs = async () => {
+      try {
+        const res = await systemSettingsApi.getPublicSettings();
+        const rawList = (res.success && Array.isArray(res.data?.campusLocations))
+          ? res.data.campusLocations
+          : [];
+
+        const formatted = rawList.map(loc => ({
+          name: loc.name,
+          zone: loc.zone || 'Campus Zone',
+          description: loc.description || '',
+          instructions: loc.instructions || '',
+          coordinates: loc.coordinates || null
+        }));
+
+        // Always provide custom building / off-campus address option
+        formatted.push({
+          name: 'Custom House / Apartment Address',
+          zone: 'Off-Campus',
+          description: 'Provide custom building name and room number',
+          instructions: ''
+        });
+
+        setCampusLocations(formatted);
+        if (formatted.length > 0) {
+          setSelectedCampusLocation(prev => {
+            const exists = formatted.some(l => l.name === prev);
+            return exists ? prev : formatted[0].name;
+          });
+          if (formatted[0].instructions && !pickupInstructions) {
+            setPickupInstructions(formatted[0].instructions);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load dynamic campus locations:', e);
+      }
+    };
+    fetchCampusLocs();
+  }, []);
+
+  // Browser Geolocation API Handler
+  const handleShareLiveLocation = () => {
+    setGpsError('');
+    if (!navigator.geolocation) {
+      setGpsError('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setGpsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const coords = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: Math.round(position.coords.accuracy)
+        };
+        setGpsCoords(coords);
+        setGpsLocked(true);
+        setGpsLoading(false);
+      },
+      (err) => {
+        setGpsLoading(false);
+        if (err.code === 1) {
+          setGpsError('Location permission denied. Please allow location access in your browser settings.');
+        } else {
+          setGpsError('Could not acquire your GPS location. Please try again or type your room number.');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
 
   const copyToClipboard = (text) => {
     if (navigator.clipboard) {
@@ -56,7 +160,6 @@ export default function CheckoutPage() {
     const interval = setInterval(async () => {
       attempts++;
       try {
-        const { paymentApi } = await import('../api/paymentApi');
         const res = await paymentApi.getPaymentStatus(paymentId);
         setOrderApiResponse(res);
         // Backend wraps the payload under res.data (not res.payment)
@@ -109,6 +212,52 @@ export default function CheckoutPage() {
     }, 2000);
   };
 
+  // Helper to ensure order exists in MongoDB (reuses activeOrder if already created in session)
+  const getOrCreateOrder = async (activeServiceId) => {
+    if (activeOrder?._id) {
+      return activeOrder;
+    }
+
+    const isCustom = selectedCampusLocation === 'Custom House / Apartment Address';
+    const effectiveStreet = isCustom ? (customStreet || 'Nairobi') : selectedCampusLocation;
+
+    const orderRes = await orderApi.createOrder({
+      items: [
+        {
+          serviceId: activeServiceId,
+          quantity: 1
+        }
+      ],
+      customerDetails: {
+        fullName: clientName.trim() || 'Valued Customer',
+        phone: clientPhone.trim() || phone.trim() || '',
+        email: clientEmail.trim() || ''
+      },
+      pickupAddress: {
+        street: effectiveStreet,
+        city: 'Nairobi',
+        campusLocation: selectedCampusLocation,
+        houseNumber: houseNumber.trim(),
+        instructions: pickupInstructions.trim(),
+        coordinates: gpsCoords ? { lat: gpsCoords.lat, lng: gpsCoords.lng, accuracy: gpsCoords.accuracy } : undefined,
+        liveLocationUrl: gpsCoords ? `https://maps.google.com/?q=${gpsCoords.lat},${gpsCoords.lng}` : ''
+      },
+      deliveryAddress: {
+        street: effectiveStreet,
+        city: 'Nairobi',
+        houseNumber: houseNumber.trim()
+      },
+      notes: pickupInstructions.trim()
+    });
+
+    if (!orderRes.success || !orderRes.data?.order?._id) {
+      throw new Error(orderRes.message || 'Failed to create order.');
+    }
+
+    setActiveOrder(orderRes.data.order);
+    return orderRes.data.order;
+  };
+
   // Handle STK Push / Checkout Request to backend
   const handleStkPush = async (e) => {
     e.preventDefault();
@@ -116,9 +265,14 @@ export default function CheckoutPage() {
     setStkSuccess(false);
     setPaymentStatusMsg('');
 
-    const cleanPhone = phone.trim().replace(/\s+/g, '');
+    const cleanPhone = (phone || clientPhone).trim().replace(/\s+/g, '');
     if (!cleanPhone || cleanPhone.length < 9) {
       setStkError('Please enter a valid M-Pesa phone number (e.g. 0712345678)');
+      return;
+    }
+
+    if (!clientName.trim()) {
+      setStkError('Please enter your full name so the cleaner can identify your order.');
       return;
     }
 
@@ -132,29 +286,12 @@ export default function CheckoutPage() {
         return;
       }
 
-      // Step 1: Create Order in MongoDB using authoritative service ID
-      const orderRes = await orderApi.createOrder({
-        items: [
-          {
-            serviceId: activeServiceId,
-            quantity: 1
-          }
-        ],
-        pickupAddress: { street: 'Main Campus Gate A', city: 'Nairobi' },
-        deliveryAddress: { street: orderData.deliveryOption || 'Nairobi', city: 'Nairobi' }
-      });
-
-      if (!orderRes.success || !orderRes.data?.order?._id) {
-        setStkError(orderRes.message || 'Failed to create order.');
-        setStkLoading(false);
-        return;
-      }
-
-      const createdOrderId = orderRes.data.order._id;
-      const createdOrderRef = orderRes.data.order.orderRef;
+      // Step 1: Get existing or create Order in MongoDB
+      const currentOrder = await getOrCreateOrder(activeServiceId);
+      const createdOrderId = currentOrder._id;
+      const createdOrderRef = currentOrder.orderRef;
 
       // Step 2: Trigger PayHero STK Push via backend endpoint
-      const { paymentApi } = await import('../api/paymentApi');
       const payRes = await paymentApi.checkoutPayment({
         orderId: createdOrderId,
         paymentMethod: 'mpesa',
@@ -170,7 +307,7 @@ export default function CheckoutPage() {
         setStkLoading(false);
       }
     } catch (err) {
-      setStkError(err.response?.data?.message || 'Error processing payment checkout.');
+      setStkError(err.response?.data?.message || err.message || 'Error processing payment checkout.');
       setStkLoading(false);
     }
   };
@@ -205,21 +342,10 @@ export default function CheckoutPage() {
         return;
       }
 
-      // Step 1: Create Order in MongoDB if not yet created
-      const orderRes = await orderApi.createOrder({
-        items: [{ serviceId: activeServiceId, quantity: 1 }],
-        pickupAddress: { street: 'Main Campus Gate A', city: 'Nairobi' },
-        deliveryAddress: { street: orderData.deliveryOption || 'Nairobi', city: 'Nairobi' }
-      });
-
-      if (!orderRes.success || !orderRes.data?.order?._id) {
-        setConfirmError(orderRes.message || 'Failed to create order.');
-        setConfirmLoading(false);
-        return;
-      }
-
-      const createdOrderId = orderRes.data.order._id;
-      const createdOrderRef = orderRes.data.order.orderRef;
+      // Step 1: Get existing or create Order in MongoDB
+      const currentOrder = await getOrCreateOrder(activeServiceId);
+      const createdOrderId = currentOrder._id;
+      const createdOrderRef = currentOrder.orderRef;
 
       // Step 2: Verify M-Pesa payment via backend verification service
       const verifyRes = await paymentApi.verifyManualPayment({
@@ -336,6 +462,220 @@ export default function CheckoutPage() {
               </div>
             </section>
 
+            {/* 1. Client Contact Details & House Pickup Location Section */}
+            <section className="bg-surface-container-lowest rounded-xl p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)] border border-outline-variant/30">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                    <span className="material-symbols-outlined text-[20px]">person_pin_circle</span>
+                  </div>
+                  <div>
+                    <h2 className="font-headline-md text-headline-md text-on-surface">Your Details &amp; Pickup Point</h2>
+                    <p className="text-xs text-on-surface-variant">Helps the cleaner find your room/hostel quickly.</p>
+                  </div>
+                </div>
+                <span className="bg-primary-container text-on-primary-container text-[11px] font-semibold px-2.5 py-1 rounded-full">Step 1 of 2</span>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                {/* Full Name & Phone Number */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold text-on-surface flex items-center gap-1">
+                      <span>Full Name</span>
+                      <span className="text-error">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Brian Otieno"
+                      value={clientName}
+                      onChange={(e) => setClientName(e.target.value)}
+                      className="w-full bg-[#F1F5F9] rounded-lg px-3.5 py-3 text-sm text-on-surface border border-transparent focus:bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                      required
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold text-on-surface flex items-center gap-1">
+                      <span>Phone Number (Calls/WhatsApp)</span>
+                      <span className="text-error">*</span>
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="0712345678"
+                      value={clientPhone}
+                      onChange={(e) => {
+                        setClientPhone(e.target.value);
+                        if (!phone) setPhone(e.target.value);
+                      }}
+                      className="w-full bg-[#F1F5F9] rounded-lg px-3.5 py-3 text-sm text-on-surface border border-transparent focus:bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Email Address */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-on-surface">
+                    Email Address (For receipts &amp; live order tracking)
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="e.g. brian@university.ac.ke"
+                    value={clientEmail}
+                    onChange={(e) => setClientEmail(e.target.value)}
+                    className="w-full bg-[#F1F5F9] rounded-lg px-3.5 py-3 text-sm text-on-surface border border-transparent focus:bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                  />
+                </div>
+
+                {/* Campus Pickup Place Selector (Admin Configured) */}
+                <div className="flex flex-col gap-1 pt-2 border-t border-surface-variant/40">
+                  <label className="text-xs font-semibold text-on-surface flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[16px] text-primary">location_city</span>
+                      Campus Pickup Hub / Station
+                    </span>
+                    <span className="text-[11px] text-primary font-medium">Admin Configured Places</span>
+                  </label>
+                  <select
+                    value={selectedCampusLocation}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedCampusLocation(val);
+                      const loc = campusLocations.find(l => l.name === val);
+                      if (loc && loc.instructions) {
+                        setPickupInstructions(loc.instructions);
+                      }
+                    }}
+                    className="w-full bg-[#F1F5F9] rounded-lg px-3.5 py-3 text-sm text-on-surface border border-transparent focus:bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all cursor-pointer font-medium"
+                  >
+                    {campusLocations.map((loc, idx) => (
+                      <option key={idx} value={loc.name}>
+                        {loc.name} {loc.zone ? `(${loc.zone})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Custom Address input if custom selected */}
+                {selectedCampusLocation === 'Custom House / Apartment Address' && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold text-on-surface">
+                      Custom Street / Building Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Apex Court, Along University Way"
+                      value={customStreet}
+                      onChange={(e) => setCustomStreet(e.target.value)}
+                      className="w-full bg-[#F1F5F9] rounded-lg px-3.5 py-3 text-sm text-on-surface border border-transparent focus:bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                    />
+                  </div>
+                )}
+
+                {/* Room / House / Hostel Floor Number */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold text-on-surface flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[16px] text-secondary">meeting_room</span>
+                      <span>Room / House / Apartment No.</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Room 204, 2nd Floor"
+                      value={houseNumber}
+                      onChange={(e) => setHouseNumber(e.target.value)}
+                      className="w-full bg-[#F1F5F9] rounded-lg px-3.5 py-3 text-sm text-on-surface border border-transparent focus:bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold text-on-surface flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[16px] text-tertiary">notes</span>
+                      <span>Pickup Notes / Landmark</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Near the main water dispenser"
+                      value={pickupInstructions}
+                      onChange={(e) => setPickupInstructions(e.target.value)}
+                      className="w-full bg-[#F1F5F9] rounded-lg px-3.5 py-3 text-sm text-on-surface border border-transparent focus:bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Live GPS Location Pin Feature */}
+                <div className="mt-2 bg-gradient-to-r from-blue-50/70 to-indigo-50/50 border border-blue-200/60 rounded-xl p-4 flex flex-col gap-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <span className="material-symbols-outlined text-[18px]">my_location</span>
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900">Share Live GPS House Location</h4>
+                        <p className="text-[11px] text-slate-600">Enables turn-by-turn Google Maps navigation for cleaner/rider.</p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleShareLiveLocation}
+                      disabled={gpsLoading}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+                        gpsLocked
+                          ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                          : 'bg-primary text-on-primary hover:bg-primary/90'
+                      }`}
+                    >
+                      {gpsLoading ? (
+                        <>
+                          <span className="material-symbols-outlined animate-spin text-[16px]">sync</span>
+                          Locating...
+                        </>
+                      ) : gpsLocked ? (
+                        <>
+                          <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                          GPS Locked
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined text-[16px]">near_me</span>
+                          Pin My Live Location
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {gpsLocked && gpsCoords && (
+                    <div className="bg-white/80 border border-emerald-300 rounded-lg p-2.5 flex items-center justify-between text-xs text-emerald-900">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span>
+                          <strong>GPS Coordinates:</strong> {gpsCoords.lat.toFixed(5)}, {gpsCoords.lng.toFixed(5)} (±{gpsCoords.accuracy}m precision)
+                        </span>
+                      </div>
+                      <a
+                        href={`https://maps.google.com/?q=${gpsCoords.lat},${gpsCoords.lng}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-blue-600 hover:underline font-semibold flex items-center gap-1 text-[11px]"
+                      >
+                        <span>Preview on Maps</span>
+                        <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+                      </a>
+                    </div>
+                  )}
+
+                  {gpsError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-2 text-xs text-red-700 flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[16px]">error</span>
+                      <span>{gpsError}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+
             {/* M-Pesa Payment Instructions Bento */}
             <section className="bg-surface-container-highest rounded-xl p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)] relative overflow-hidden">
               <div className="absolute -top-10 -right-10 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none"></div>
@@ -347,21 +687,29 @@ export default function CheckoutPage() {
                   </span>
                 </div>
                 <div>
-                  <h2 className="font-headline-md text-headline-md text-on-surface">M-Pesa Payment</h2>
+                  <h2 className="font-headline-md text-headline-md text-on-surface">M-Pesa Payment (Step 2 of 2)</h2>
                   <p className="text-xs text-on-surface-variant">Recipient Till: <strong className="text-primary font-mono">{orderData.tillNumber || '8995354'}</strong> ({orderData.providerName || 'Laundry Provider'})</p>
                 </div>
               </div>
 
-              {/* Payment Channel Confirmation Badge */}
-              <div className="bg-emerald-50/80 border border-emerald-200 rounded-lg p-3 mb-6 flex items-center justify-between text-xs text-emerald-900">
+              {/* Payment Channel Confirmation Badge & Transparency Mode */}
+              <div className="bg-emerald-50/80 border border-emerald-200 rounded-lg p-3.5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-2 text-xs text-emerald-900">
                 <div className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-emerald-600 text-lg">verified_user</span>
                   <div>
-                    <span className="font-semibold block">Official Platform &amp; Provider Payment Channel</span>
-                    <span className="text-[11px] text-emerald-700">Till: {orderData.tillNumber || '8995354'} ({orderData.providerName || 'Provider'})</span>
+                    <span className="font-semibold block">
+                      {orderData.tillNumber && orderData.tillNumber !== '8995354'
+                        ? 'Direct Provider Payment (0% Platform Fee)'
+                        : 'Official Aura Platform Escrow Channel'}
+                    </span>
+                    <span className="text-[11px] text-emerald-700">
+                      {orderData.tillNumber && orderData.tillNumber !== '8995354'
+                        ? `Funds go 100% directly to ${orderData.providerName || 'Provider'}`
+                        : 'Protected payment with instant cleaner notification'}
+                    </span>
                   </div>
                 </div>
-                <span className="bg-emerald-100 text-emerald-800 font-mono font-bold px-2 py-1 rounded">Till #{orderData.tillNumber || '8995354'}</span>
+                <span className="bg-emerald-100 text-emerald-800 font-mono font-bold px-2.5 py-1 rounded text-center">Till #{orderData.tillNumber || '8995354'}</span>
               </div>
 
               <div className="flex flex-col gap-6 relative z-10">

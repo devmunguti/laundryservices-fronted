@@ -74,29 +74,47 @@ export default function AdminOrderManagement() {
 
       if (ordersRes.success && ordersRes.data) {
         const rawList = ordersRes.data.orders || [];
-        const formattedOrders = rawList.map((o) => ({
-          id: o._id,
-          displayId: o.orderRef || `#ORD-${o._id.slice(-6).toUpperCase()}`,
-          customer: o.customer?.fullName || 'Guest Customer',
-          phone: o.customer?.phone || '+254 700 000 000',
-          address: o.pickupAddress?.street || 'Nairobi',
-          avatar: null,
-          initials: (o.customer?.fullName || 'GC').split(' ').map(n => n[0]).join('').slice(0, 2),
-          initialsBg: 'bg-primary-container text-on-primary-container',
-          cleaners: o.provider?.providerDetails?.businessName || o.provider?.fullName || 'Unassigned Cleaner',
-          serviceIcon: 'local_laundry_service',
-          serviceType: o.items?.[0]?.name || 'Standard Laundry',
-          items: o.items?.map(it => `${it.quantity || 1}x ${it.name || 'Laundry'}`).join(', ') || '1x Laundry Service',
-          amount: `KES ${(o.pricing?.grandTotal || o.totalAmount || 0).toLocaleString()}`,
-          status: o.status || 'Pending',
-          statusType: (o.status || 'Pending').toLowerCase().replace(/_/g, '-'),
-          statusLabel: (o.status || 'Pending').replace(/_/g, ' '),
-          transactionId: o.transactionId || o.payment?.transactionId || null,
-          paymentStatus: o.paymentStatus || o.payment?.status || 'Pending',
-          paymentMethod: o.payment?.method || 'M-Pesa',
-          date: new Date(o.createdAt || Date.now()).toLocaleDateString(),
-          time: new Date(o.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }));
+        const formattedOrders = rawList.map((o) => {
+          const custName = o.customerDetails?.fullName || o.customer?.fullName || 'Guest Customer';
+          const custPhone = o.customerDetails?.phone || o.customer?.phone || o.payment?.phoneNumber || '';
+          const custEmail = o.customerDetails?.email || o.customer?.email || '';
+          const campusLoc = o.pickupAddress?.campusLocation || o.pickupAddress?.street || 'Nairobi';
+          const roomNo = o.pickupAddress?.houseNumber || '';
+          const instruct = o.pickupAddress?.instructions || o.notes || '';
+          const coords = o.pickupAddress?.coordinates || null;
+          const mapUrl = o.pickupAddress?.liveLocationUrl || (coords?.lat ? `https://maps.google.com/?q=${coords.lat},${coords.lng}` : '');
+
+          return {
+            id: o._id,
+            displayId: o.orderRef || `#ORD-${o._id.slice(-6).toUpperCase()}`,
+            customer: custName,
+            customerPhone: custPhone,
+            customerEmail: custEmail,
+            campusLocation: campusLoc,
+            houseNumber: roomNo,
+            instructions: instruct,
+            coordinates: coords,
+            liveLocationUrl: mapUrl,
+            phone: custPhone || '+254 700 000 000',
+            address: roomNo ? `${campusLoc} (${roomNo})` : campusLoc,
+            avatar: null,
+            initials: custName.split(' ').map(n => n[0]).join('').slice(0, 2),
+            initialsBg: 'bg-primary-container text-on-primary-container',
+            cleaners: o.provider?.providerDetails?.businessName || o.provider?.fullName || 'Unassigned Cleaner',
+            serviceIcon: 'local_laundry_service',
+            serviceType: o.items?.[0]?.name || 'Standard Laundry',
+            items: o.items?.map(it => `${it.quantity || 1}x ${it.name || 'Laundry'}`).join(', ') || '1x Laundry Service',
+            amount: `KES ${(o.pricing?.grandTotal || o.totalAmount || 0).toLocaleString()}`,
+            status: o.status || 'Pending',
+            statusType: (o.status || 'Pending').toLowerCase().replace(/_/g, '-'),
+            statusLabel: (o.status || 'Pending').replace(/_/g, ' '),
+            transactionId: o.transactionId || o.payment?.transactionId || null,
+            paymentStatus: o.paymentStatus || o.payment?.status || 'Pending',
+            paymentMethod: o.payment?.method || 'M-Pesa',
+            date: new Date(o.createdAt || Date.now()).toLocaleDateString(),
+            time: new Date(o.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+        });
         setOrders(formattedOrders);
       }
 
@@ -519,14 +537,90 @@ export default function AdminOrderManagement() {
               </span>
             </div>
             <div className="space-y-3 border-t border-surface-container/40 pt-4 text-sm font-body-sm">
-              <div>
-                <span className="text-xs text-on-surface-variant block">Customer</span>
-                <span className="font-medium text-on-surface">{viewingOrder.customer} ({viewingOrder.phone})</span>
+              {/* Customer Contact & Live Location Destination Card */}
+              <div className="bg-gradient-to-br from-blue-50/80 to-indigo-50/50 border border-blue-200/70 rounded-2xl p-4 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] text-blue-700 font-bold uppercase tracking-wider block">Customer &amp; Location</span>
+                    <h4 className="font-bold text-slate-900 text-sm">{viewingOrder.customer}</h4>
+                  </div>
+                  {viewingOrder.customerPhone && (
+                    <div className="flex items-center gap-1.5">
+                      <a
+                        href={`tel:${viewingOrder.customerPhone}`}
+                        className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 transition-colors shadow-xs"
+                        title="Direct Call"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">call</span>
+                      </a>
+                      <a
+                        href={`https://wa.me/${viewingOrder.customerPhone.replace(/[^0-9]/g, '')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center hover:bg-emerald-700 transition-colors shadow-xs"
+                        title="WhatsApp Chat"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">chat</span>
+                      </a>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1 text-xs text-slate-700">
+                  <p className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[15px] text-blue-600">location_city</span>
+                    <span><strong>Pickup Station:</strong> {viewingOrder.campusLocation}</span>
+                  </p>
+                  {viewingOrder.houseNumber && (
+                    <p className="flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[15px] text-indigo-600">meeting_room</span>
+                      <span><strong>Room / House / Floor:</strong> {viewingOrder.houseNumber}</span>
+                    </p>
+                  )}
+                  {viewingOrder.instructions && (
+                    <p className="flex items-center gap-1.5 text-slate-600 italic">
+                      <span className="material-symbols-outlined text-[15px] text-slate-400">notes</span>
+                      <span>"{viewingOrder.instructions}"</span>
+                    </p>
+                  )}
+                  {viewingOrder.customerPhone && (
+                    <p className="flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[15px] text-slate-500">phone</span>
+                      <span>{viewingOrder.customerPhone}</span>
+                    </p>
+                  )}
+                  {viewingOrder.customerEmail && (
+                    <p className="flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[15px] text-slate-500">mail</span>
+                      <span>{viewingOrder.customerEmail}</span>
+                    </p>
+                  )}
+                </div>
+
+                {/* Google Maps Turn-by-Turn GPS Button */}
+                {viewingOrder.liveLocationUrl ? (
+                  <a
+                    href={viewingOrder.liveLocationUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">directions</span>
+                    <span>Navigate in Google Maps</span>
+                  </a>
+                ) : viewingOrder.address ? (
+                  <a
+                    href={`https://maps.google.com/?q=${encodeURIComponent(viewingOrder.address + ', Nairobi')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">map</span>
+                    <span>Search Pickup Point on Maps</span>
+                  </a>
+                ) : null}
               </div>
-              <div>
-                <span className="text-xs text-on-surface-variant block">Pickup / Delivery Address</span>
-                <span className="font-medium text-on-surface">{viewingOrder.address}</span>
-              </div>
+
               <div>
                 <span className="text-xs text-on-surface-variant block">Assigned Cleaner</span>
                 <span className="font-medium text-on-surface">{viewingOrder.cleaners}</span>

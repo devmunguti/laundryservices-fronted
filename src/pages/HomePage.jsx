@@ -58,7 +58,11 @@ export default function HomePage() {
     }));
   };
 
-  // Sort services: Promoted partner services appear at the very TOP (#1)
+  const [homeSort, setHomeSort] = useState('rating_desc');
+  const [selectedHomeCategory, setSelectedHomeCategory] = useState('All');
+  const [selectedPriceFilter, setSelectedPriceFilter] = useState('All');
+
+  // Sort services: Promoted partner services appear at the very TOP (#1), then sorted by 5-star rating or cheap price
   const promotedProviderId = featuredProvider?._id || featuredProvider?.id || null;
 
   const sortedServices = [...services].sort((a, b) => {
@@ -70,6 +74,18 @@ export default function HomePage() {
 
     if (aIsPromoted && !bIsPromoted) return -1;
     if (!aIsPromoted && bIsPromoted) return 1;
+
+    if (homeSort === 'cheap') {
+      const aPrice = a.basePrice || 0;
+      const bPrice = b.basePrice || 0;
+      if (aPrice !== bPrice) return aPrice - bPrice;
+    }
+
+    // Default: Sort strictly by 5-star rating down to lower rating
+    const aRating = Number(a.provider?.providerDetails?.rating ?? 5.0);
+    const bRating = Number(b.provider?.providerDetails?.rating ?? 5.0);
+    if (bRating !== aRating) return bRating - aRating;
+
     return 0;
   });
 
@@ -79,7 +95,21 @@ export default function HomePage() {
     const catMatch = service.category?.toLowerCase().includes(q);
     const providerMatch = service.provider?.fullName?.toLowerCase().includes(q) ||
       service.provider?.providerDetails?.businessName?.toLowerCase().includes(q);
-    return nameMatch || catMatch || providerMatch;
+
+    const matchesSearch = !q || nameMatch || catMatch || providerMatch;
+    const matchesCategory = selectedHomeCategory === 'All' || service.category?.toLowerCase() === selectedHomeCategory.toLowerCase();
+    
+    let matchesPrice = true;
+    const price = service.basePrice || 0;
+    if (selectedPriceFilter === 'budget') {
+      matchesPrice = price <= 300;
+    } else if (selectedPriceFilter === 'standard') {
+      matchesPrice = price > 300 && price <= 800;
+    } else if (selectedPriceFilter === 'premium') {
+      matchesPrice = price > 800;
+    }
+
+    return matchesSearch && matchesCategory && matchesPrice;
   });
 
   return (
@@ -223,21 +253,68 @@ export default function HomePage() {
 
           {/* Top Rated Providers Section */}
           <div className="max-w-[1240px] mx-auto w-full px-container-padding-desktop mt-16">
-            <div className="flex items-end justify-between mb-8">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
               <div>
-                <h2 className="font-headline-lg text-headline-lg text-on-surface font-semibold">
-                  Top Rated Providers
+                <h2 className="font-headline-lg text-headline-lg text-on-surface font-semibold flex items-center gap-2">
+                  <span>Top Rated Providers</span>
+                  <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                    5★ Ranked
+                  </span>
                 </h2>
-                <p className="font-body-md text-body-md text-on-surface-variant mt-2">
-                  Highly vetted services in your area
+                <p className="font-body-md text-body-md text-on-surface-variant mt-1">
+                  Vetted laundry professionals arranged by client ratings and affordability
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+
+              {/* Interactive Sort & Filter Controls */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1 bg-surface-container p-1 rounded-full border border-outline-variant/30 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setHomeSort('rating_desc')}
+                    className={`px-3 py-1.5 rounded-full font-semibold transition-all cursor-pointer flex items-center gap-1 ${
+                      homeSort === 'rating_desc'
+                        ? 'bg-primary text-on-primary shadow-xs'
+                        : 'text-on-surface-variant hover:text-on-surface'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[14px]">star</span>
+                    <span>Top Rated</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setHomeSort('cheap')}
+                    className={`px-3 py-1.5 rounded-full font-semibold transition-all cursor-pointer flex items-center gap-1 ${
+                      homeSort === 'cheap'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-on-surface-variant hover:text-on-surface'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[14px]">payments</span>
+                    <span>Cheapest</span>
+                  </button>
+                </div>
+
+                {/* Price Filter Pill */}
+                <select
+                  value={selectedPriceFilter}
+                  onChange={(e) => setSelectedPriceFilter(e.target.value)}
+                  className="bg-surface-container border border-outline-variant/30 text-on-surface text-xs font-bold py-1.5 px-3 rounded-full outline-none focus:border-primary cursor-pointer"
+                >
+                  <option value="All">All Prices</option>
+                  <option value="budget">Cheap (&le; KES 300)</option>
+                  <option value="standard">Standard (KES 300 - 800)</option>
+                  <option value="premium">Premium (KES 800+)</option>
+                </select>
+
                 <button
                   type="button"
-                  className="px-4 py-2 rounded-full border border-outline-variant/50 hover:bg-surface-container-high transition-colors text-on-surface font-label-md text-label-md flex items-center gap-2"
+                  onClick={() => navigate('/reviews')}
+                  className="px-3.5 py-1.5 rounded-full border border-primary/30 text-primary hover:bg-primary/5 transition-colors text-xs font-bold flex items-center gap-1 cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-[18px]">tune</span> Filter
+                  <span className="material-symbols-outlined text-[15px]">rate_review</span>
+                  <span>Rankings &amp; Reviews</span>
                 </button>
               </div>
             </div>

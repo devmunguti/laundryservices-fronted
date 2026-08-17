@@ -47,6 +47,18 @@ export default function AdminSystemSettings() {
   const [showSmsSid, setShowSmsSid] = useState(false);
   const [revealedSmsSid, setRevealedSmsSid] = useState(null);
 
+  // Campus Locations Management State
+  const [campusLocations, setCampusLocations] = useState([]);
+  const [showAddLocationModal, setShowAddLocationModal] = useState(false);
+  const [locationForm, setLocationForm] = useState({
+    name: '',
+    zone: 'Main Campus',
+    description: '',
+    instructions: '',
+    isActive: true
+  });
+  const [locationActionLoading, setLocationActionLoading] = useState(false);
+
   // Populate component form state from fetched backend settings
   const applySettingsToForm = useCallback((settingsData) => {
     if (!settingsData) return;
@@ -80,6 +92,10 @@ export default function AdminSystemSettings() {
       setSmsSid(settingsData.operations.smsSidMasked || '');
       setSmsSenderId(settingsData.operations.smsSenderId || '');
       setEmailAlerts(settingsData.operations.superAdminEmailAlerts ?? true);
+    }
+
+    if (settingsData.campusLocations) {
+      setCampusLocations(settingsData.campusLocations);
     }
 
     if (settingsData.updatedAt) {
@@ -214,8 +230,62 @@ export default function AdminSystemSettings() {
     alert('Copied to clipboard!');
   };
 
+  const handleAddLocationSubmit = async (e) => {
+    e.preventDefault();
+    if (!locationForm.name.trim()) return;
+
+    try {
+      setLocationActionLoading(true);
+      const res = await systemSettingsApi.addCampusLocation(locationForm);
+      if (res.success && res.data) {
+        setCampusLocations(res.data);
+        setShowAddLocationModal(false);
+        setLocationForm({
+          name: '',
+          zone: 'Main Campus',
+          description: '',
+          instructions: '',
+          isActive: true
+        });
+        refreshSettings();
+        alert('Campus Pickup Hub added successfully!');
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to add campus location.');
+    } finally {
+      setLocationActionLoading(false);
+    }
+  };
+
+  const handleToggleLocationActive = async (locId, currentActive) => {
+    try {
+      const res = await systemSettingsApi.updateCampusLocation(locId, { isActive: !currentActive });
+      if (res.success && res.data) {
+        setCampusLocations(res.data);
+        refreshSettings();
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to update campus location status.');
+    }
+  };
+
+  const handleDeleteLocation = async (locId) => {
+    if (!window.confirm('Are you sure you want to delete this campus pickup station?')) return;
+
+    try {
+      const res = await systemSettingsApi.deleteCampusLocation(locId);
+      if (res.success && res.data) {
+        setCampusLocations(res.data);
+        refreshSettings();
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to delete campus location.');
+    }
+  };
+
   const navItems = [
     { id: 'general', label: 'General Settings', icon: 'tune' },
+    { id: 'campus', label: 'Campus Pickup Hubs', icon: 'location_city' },
     { id: 'financial', label: 'Financial Rules', icon: 'account_balance' },
     { id: 'notifications', label: 'Notification Prefs', icon: 'notifications_active' },
     { id: 'api', label: 'API & Integration', icon: 'api' },
@@ -380,15 +450,128 @@ export default function AdminSystemSettings() {
             </div>
           )}
 
+          {/* Campus Pickup Hubs Panel */}
+          {activeSubTab === 'campus' && (
+            <div className="bg-surface-container-lowest rounded-xl shadow-xs p-margin-desktop border border-surface-container/40 animate-fade-in space-y-stack-gap-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-headline-lg text-on-surface">Campus Pickup Stations &amp; Hubs</h2>
+                  <p className="font-body-sm text-on-surface-variant text-xs mt-1">
+                    Manage the list of official pickup and drop-off spots students can select at checkout.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddLocationModal(true)}
+                  className="bg-primary hover:bg-primary/90 text-on-primary font-label-md px-4 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 text-xs shadow-xs cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">add_location_alt</span>
+                  <span>Add Campus Hub</span>
+                </button>
+              </div>
+
+              {/* Campus Locations Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {campusLocations.length === 0 ? (
+                  <div className="col-span-2 p-8 text-center bg-surface-container-low rounded-xl text-on-surface-variant text-sm">
+                    No campus locations configured yet. Click "Add Campus Hub" to add pickup places.
+                  </div>
+                ) : (
+                  campusLocations.map((loc) => (
+                    <div
+                      key={loc._id || loc.name}
+                      className={`p-4 rounded-xl border transition-all flex flex-col justify-between gap-3 ${
+                        loc.isActive !== false
+                          ? 'bg-surface-container-lowest border-surface-container/60 shadow-xs'
+                          : 'bg-surface-container-low/60 border-dashed border-outline-variant/50 opacity-75'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center ${
+                            loc.isActive !== false ? 'bg-primary/10 text-primary' : 'bg-slate-200 text-slate-500'
+                          }`}>
+                            <span className="material-symbols-outlined text-[20px]">location_on</span>
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-sm text-on-surface">{loc.name}</h4>
+                            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">
+                              {loc.zone || 'Campus Zone'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                          loc.isActive !== false ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {loc.isActive !== false ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+
+                      {loc.description && (
+                        <p className="text-xs text-on-surface-variant">{loc.description}</p>
+                      )}
+
+                      {loc.instructions && (
+                        <div className="bg-surface-container-low p-2 rounded-lg text-[11px] text-on-surface-variant flex items-start gap-1">
+                          <span className="material-symbols-outlined text-[14px] text-tertiary shrink-0 mt-0.5">info</span>
+                          <span>{loc.instructions}</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between pt-2 border-t border-surface-container/40 mt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleLocationActive(loc._id, loc.isActive !== false)}
+                          className={`text-xs font-semibold px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                            loc.isActive !== false
+                              ? 'bg-amber-100 text-amber-900 hover:bg-amber-200'
+                              : 'bg-emerald-100 text-emerald-900 hover:bg-emerald-200'
+                          }`}
+                        >
+                          {loc.isActive !== false ? 'Deactivate' : 'Activate'}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteLocation(loc._id)}
+                          className="text-xs text-error hover:bg-error-container/30 px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">delete</span>
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Financial Rules Panel */}
           {activeSubTab === 'financial' && (
             <div className="bg-surface-container-lowest rounded-xl shadow-xs p-margin-desktop border border-surface-container/40 animate-fade-in space-y-stack-gap-lg">
               <h2 className="font-headline-lg text-on-surface">Commission & Monetization</h2>
+              
+              {/* Zero Commission Rule Highlight */}
+              <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl flex items-start gap-3">
+                <span className="material-symbols-outlined text-emerald-600 mt-0.5 text-xl">account_tree</span>
+                <div className="space-y-1">
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-emerald-950">
+                    Platform Commission &amp; Payout Rules
+                  </h4>
+                  <p className="text-xs text-emerald-900 leading-relaxed">
+                    • <strong>0% Commission:</strong> When set to 0%, customer funds flow 100% directly to the provider's payment method upon checkout. Payout Destination configuration in provider profiles is automatically disabled as no platform escrow is held.<br />
+                    • <strong>Default Platform Till (8995354):</strong> When the default till is used with commission &gt; 0%, the platform collects payments in escrow, takes the commission percentage, and admin processes payouts with automated invoice dispatches.
+                  </p>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-margin-desktop">
                 <label className="flex flex-col gap-2">
                   <span className="font-label-sm text-on-surface-variant flex items-center justify-between">
                     Platform Commission Rate (%)
-                    <span className="material-symbols-outlined text-[16px] text-tertiary cursor-help" title="Percentage deducted from each completed order for cleaners payouts.">
+                    <span className="material-symbols-outlined text-[16px] text-tertiary cursor-help" title="Percentage deducted from each completed order for cleaners payouts. Set to 0 to disable platform commission.">
                       help
                     </span>
                   </span>
@@ -405,7 +588,7 @@ export default function AdminSystemSettings() {
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 font-body-md text-on-surface-variant">%</span>
                   </div>
                   <p className="font-body-sm text-on-surface-variant text-xs mt-1">
-                    Percentage deducted from each completed order for cleaners payouts.
+                    {Number(commissionRate) === 0 ? '✨ 0% Commission Active: Providers receive 100% direct settlement.' : 'Percentage deducted for platform escrow and operations.'}
                   </p>
                 </label>
 
@@ -635,6 +818,113 @@ export default function AdminSystemSettings() {
           )}
         </div>
       </div>
+
+      {/* Add Campus Hub Modal */}
+      {showAddLocationModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-surface-container-lowest rounded-2xl p-6 max-w-md w-full shadow-2xl border border-surface-container/60 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                  <span className="material-symbols-outlined text-[20px]">add_location</span>
+                </div>
+                <h3 className="font-headline-sm text-on-surface">Add Campus Pickup Hub</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddLocationModal(false)}
+                className="w-8 h-8 rounded-full hover:bg-surface-container text-on-surface-variant flex items-center justify-center cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleAddLocationSubmit} className="flex flex-col gap-3">
+              <div>
+                <label className="text-xs font-semibold text-on-surface mb-1 block">
+                  Location / Station Name <span className="text-error">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Hostel Block B (Ladies Residence)"
+                  value={locationForm.name}
+                  onChange={(e) => setLocationForm({ ...locationForm, name: e.target.value })}
+                  className="w-full bg-surface-container-low border border-outline-variant rounded-lg px-3.5 py-2.5 text-sm text-on-surface focus:bg-white focus:border-primary outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-on-surface mb-1 block">
+                    Campus Zone
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Hostel Zone"
+                    value={locationForm.zone}
+                    onChange={(e) => setLocationForm({ ...locationForm, zone: e.target.value })}
+                    className="w-full bg-surface-container-low border border-outline-variant rounded-lg px-3.5 py-2.5 text-sm text-on-surface focus:bg-white focus:border-primary outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-on-surface mb-1 block">
+                    Building / Spot
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Block B Entrance"
+                    value={locationForm.description}
+                    onChange={(e) => setLocationForm({ ...locationForm, description: e.target.value })}
+                    className="w-full bg-surface-container-low border border-outline-variant rounded-lg px-3.5 py-2.5 text-sm text-on-surface focus:bg-white focus:border-primary outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-on-surface mb-1 block">
+                  Default Drop-off / Collection Instructions
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Leave bag with ground floor porter or caretaker."
+                  value={locationForm.instructions}
+                  onChange={(e) => setLocationForm({ ...locationForm, instructions: e.target.value })}
+                  className="w-full bg-surface-container-low border border-outline-variant rounded-lg px-3.5 py-2 text-sm text-on-surface focus:bg-white focus:border-primary outline-none resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-container/40">
+                <button
+                  type="button"
+                  onClick={() => setShowAddLocationModal(false)}
+                  className="px-4 py-2 bg-surface-container text-on-surface rounded-lg text-xs font-semibold hover:bg-surface-container-highest cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={locationActionLoading}
+                  className="px-5 py-2 bg-primary text-on-primary rounded-lg text-xs font-semibold hover:bg-primary/90 transition-all flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {locationActionLoading ? (
+                    <>
+                      <span className="material-symbols-outlined animate-spin text-[16px]">sync</span>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-[16px]">save</span>
+                      Save Campus Hub
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

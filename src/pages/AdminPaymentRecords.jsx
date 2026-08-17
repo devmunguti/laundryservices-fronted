@@ -15,6 +15,13 @@ export default function AdminPaymentRecords() {
   // Modal State for viewing details
   const [selectedPayment, setSelectedPayment] = useState(null);
 
+  // Invoice Dispatch State & Modal
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [invoiceTargetRecord, setInvoiceTargetRecord] = useState(null);
+  const [sendingInvoice, setSendingInvoice] = useState(false);
+  const [invoiceAlertMsg, setInvoiceAlertMsg] = useState(null);
+  const [bulkSendingInvoices, setBulkSendingInvoices] = useState(false);
+
   // Pagination state
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
@@ -105,6 +112,45 @@ export default function AdminPaymentRecords() {
     fetchRecords();
   }, [fetchRecords]);
 
+  // Send Single Payout Invoice
+  const handleSendInvoice = async (record) => {
+    try {
+      setSendingInvoice(true);
+      const res = await paymentApi.sendPayoutInvoice(record._id);
+      if (res.success) {
+        setInvoiceAlertMsg({ type: 'success', text: `Payout invoice ${res.data?.invoiceReference || ''} dispatched successfully to ${record.cleaners}!` });
+        setShowInvoiceModal(false);
+        await fetchRecords();
+        setTimeout(() => setInvoiceAlertMsg(null), 4000);
+      } else {
+        setInvoiceAlertMsg({ type: 'error', text: res.message || 'Failed to send invoice.' });
+      }
+    } catch (err) {
+      setInvoiceAlertMsg({ type: 'error', text: err.response?.data?.message || 'Error sending invoice.' });
+    } finally {
+      setSendingInvoice(false);
+    }
+  };
+
+  // Send Bulk Payout Invoices
+  const handleBulkSendInvoices = async () => {
+    if (!window.confirm('Send payout settlement invoices to all providers with settled payouts?')) return;
+
+    try {
+      setBulkSendingInvoices(true);
+      const res = await paymentApi.sendBulkPayoutInvoices();
+      if (res.success) {
+        setInvoiceAlertMsg({ type: 'success', text: res.message || `Dispatched ${res.data?.sentCount || 0} payout invoices successfully!` });
+        await fetchRecords();
+        setTimeout(() => setInvoiceAlertMsg(null), 4000);
+      }
+    } catch (err) {
+      setInvoiceAlertMsg({ type: 'error', text: err.response?.data?.message || 'Failed to send bulk invoices.' });
+    } finally {
+      setBulkSendingInvoices(false);
+    }
+  };
+
   // Bulk Process Payouts Handler
   const handleProcessPayouts = async () => {
     try {
@@ -194,13 +240,23 @@ export default function AdminPaymentRecords() {
             Track payments, monitor commissions, and manage cleaners payouts.
           </p>
         </div>
-        <div className="flex items-center gap-stack-gap-sm">
+        <div className="flex items-center gap-stack-gap-sm flex-wrap">
           <button
             onClick={handleExportCSV}
             className="bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md py-2 px-4 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
           >
             <span className="material-symbols-outlined text-[20px]">download</span>
             Export Report
+          </button>
+
+          <button
+            onClick={handleBulkSendInvoices}
+            disabled={bulkSendingInvoices}
+            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-label-md py-2 px-4 rounded-lg transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            title="Dispatch payout settlement receipts to all settled providers"
+          >
+            <span className="material-symbols-outlined text-[20px]">{bulkSendingInvoices ? 'sync' : 'receipt_long'}</span>
+            <span>{bulkSendingInvoices ? 'Sending Invoices...' : 'Send Bulk Invoices'}</span>
           </button>
 
           <button
@@ -232,6 +288,23 @@ export default function AdminPaymentRecords() {
           </button>
         </div>
       </div>
+
+      {/* Invoice Alert Banner */}
+      {invoiceAlertMsg && (
+        <div className={`p-4 rounded-xl text-xs font-semibold flex items-center justify-between border ${
+          invoiceAlertMsg.type === 'success' ? 'bg-emerald-50 text-emerald-900 border-emerald-200' : 'bg-red-50 text-red-900 border-red-200'
+        }`}>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-base">
+              {invoiceAlertMsg.type === 'success' ? 'check_circle' : 'error'}
+            </span>
+            <span>{invoiceAlertMsg.text}</span>
+          </div>
+          <button onClick={() => setInvoiceAlertMsg(null)} className="text-slate-500 hover:text-slate-900">
+            <span className="material-symbols-outlined text-base">close</span>
+          </button>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-stack-gap-md">
@@ -445,6 +518,19 @@ export default function AdminPaymentRecords() {
                               <span className="material-symbols-outlined text-[16px]">check_circle</span> Settle Payout
                             </button>
                           )}
+                          {row.status === 'Completed' && (
+                            <button
+                              onClick={() => {
+                                setInvoiceTargetRecord(row);
+                                setShowInvoiceModal(true);
+                                setActiveMenuId(null);
+                              }}
+                              className="w-full px-3 py-1.5 hover:bg-surface-container text-indigo-700 text-xs flex items-center gap-2 cursor-pointer"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">receipt_long</span>
+                              {row.invoiceSentAt ? 'Resend Invoice' : 'Send Invoice'}
+                            </button>
+                          )}
                         </div>
                       )}
                     </td>
@@ -534,7 +620,7 @@ export default function AdminPaymentRecords() {
 
               <div className="flex justify-between py-1 border-b border-surface-container-low">
                 <span className="text-on-surface-variant">Cleaner Payout Amount:</span>
-                <span className="font-bold">KES {formatCurrency(selectedPayment.providerPayoutAmount || selectedPayment.amount - selectedPayment.comm)}</span>
+                <span className="font-bold text-emerald-700">KES {formatCurrency(selectedPayment.providerPayoutAmount || selectedPayment.amount - selectedPayment.comm)}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-surface-container-low">
                 <span className="text-on-surface-variant">Payout Status:</span>
@@ -548,13 +634,115 @@ export default function AdminPaymentRecords() {
                   <span className="font-mono text-xs">{selectedPayment.payoutReference}</span>
                 </div>
               )}
+              {selectedPayment.invoiceSentAt && (
+                <div className="flex justify-between py-1 border-b border-surface-container-low bg-indigo-50 p-2 rounded-lg">
+                  <span className="text-indigo-900 text-xs font-semibold">Invoice Sent:</span>
+                  <span className="text-indigo-700 text-xs font-mono">{new Date(selectedPayment.invoiceSentAt).toLocaleDateString()}</span>
+                </div>
+              )}
             </div>
-            <div className="mt-6 flex justify-end">
+            <div className="mt-6 flex justify-between items-center">
+              {selectedPayment.status === 'Completed' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInvoiceTargetRecord(selectedPayment);
+                    setShowInvoiceModal(true);
+                    setSelectedPayment(null);
+                  }}
+                  className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[16px]">receipt_long</span>
+                  <span>{selectedPayment.invoiceSentAt ? 'Resend Invoice' : 'Send Invoice'}</span>
+                </button>
+              ) : <div />}
               <button
                 onClick={() => setSelectedPayment(null)}
-                className="px-4 py-2 bg-primary text-on-primary rounded-lg font-label-md cursor-pointer"
+                className="px-4 py-2 bg-primary text-on-primary rounded-lg font-label-md cursor-pointer text-xs"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payout Invoice Preview & Dispatch Modal */}
+      {showInvoiceModal && invoiceTargetRecord && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-surface-container-lowest border border-surface-container rounded-3xl max-w-lg w-full p-6 shadow-2xl relative flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-surface-container pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-[18px]">receipt_long</span>
+                </div>
+                <h3 className="font-bold text-slate-900 text-base">Send Payout Settlement Invoice</h3>
+              </div>
+              <button
+                onClick={() => setShowInvoiceModal(false)}
+                className="text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              An official email receipt with full financial breakdown will be sent directly to <strong>{invoiceTargetRecord.cleaners}</strong>.
+            </p>
+
+            {/* Itemized Invoice Preview Card */}
+            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-2.5 text-xs text-slate-800">
+              <div className="flex justify-between font-mono pb-2 border-b border-slate-200">
+                <span className="text-slate-500">Invoice Ref:</span>
+                <span className="font-bold text-indigo-700">INV-PO-{invoiceTargetRecord._id?.slice(-8).toUpperCase() || 'PAYOUT'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Order Reference:</span>
+                <span className="font-semibold">{invoiceTargetRecord.id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Cleaner / Provider:</span>
+                <span className="font-semibold">{invoiceTargetRecord.cleaners}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Gross Order Total:</span>
+                <span className="font-semibold">KES {formatCurrency(invoiceTargetRecord.amount)}</span>
+              </div>
+              <div className="flex justify-between text-rose-600">
+                <span>Platform Commission ({invoiceTargetRecord.commissionRate ?? settings?.commissionRate ?? 15}%):</span>
+                <span>- KES {formatCurrency(invoiceTargetRecord.comm)}</span>
+              </div>
+              <div className="flex justify-between pt-2 border-t border-slate-200 font-bold text-sm text-emerald-800">
+                <span>Net Disbursed Amount:</span>
+                <span>KES {formatCurrency(invoiceTargetRecord.providerPayoutAmount || invoiceTargetRecord.amount - invoiceTargetRecord.comm)}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowInvoiceModal(false)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={sendingInvoice}
+                onClick={() => handleSendInvoice(invoiceTargetRecord)}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {sendingInvoice ? (
+                  <>
+                    <span className="material-symbols-outlined animate-spin text-[16px]">sync</span>
+                    Dispatching Invoice...
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-[16px]">send</span>
+                    Dispatch Payout Invoice
+                  </>
+                )}
               </button>
             </div>
           </div>

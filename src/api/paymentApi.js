@@ -122,6 +122,22 @@ export const paymentApi = {
   verifyManualPayment: async (data) => {
     const response = await api.post('/payments/verify-manual', data);
     return response.data;
+  },
+
+  /**
+   * Admin send payout settlement invoice to provider
+   */
+  sendPayoutInvoice: async (paymentId) => {
+    const response = await api.post(`/payments/${paymentId}/send-payout-invoice`);
+    return response.data;
+  },
+
+  /**
+   * Admin send payout invoices in bulk
+   */
+  sendBulkPayoutInvoices: async (paymentIds) => {
+    const response = await api.post('/payments/bulk-send-invoices', { paymentIds });
+    return response.data;
   }
 };
 

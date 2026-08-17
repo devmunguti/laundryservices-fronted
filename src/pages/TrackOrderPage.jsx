@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { orderApi } from '../api/orderApi';
 import { reviewApi } from '../api/reviewApi';
+import LiveNavigationMap from '../components/navigation/LiveNavigationMap';
 
 // ─── Order Status Timeline Definition ─────────────────────────────────────────
 // Matches the backend Order model enum exactly
@@ -497,8 +498,66 @@ export default function TrackOrderPage() {
   const [lastRefreshed, setLastRefreshed] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [updatingLocation, setUpdatingLocation] = useState(false);
+  const [locationSuccess, setLocationSuccess] = useState(false);
+  const [locationError, setLocationError] = useState('');
+  const [editRoom, setEditRoom] = useState('');
+  const [editInstructions, setEditInstructions] = useState('');
+
   const intervalRef = useRef(null);
   const isMountedRef = useRef(true);
+
+  // Update Live Location using browser GPS
+  const handleUpdateGpsLocation = async () => {
+    setLocationError('');
+    setLocationSuccess(false);
+
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setUpdatingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const coords = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: Math.round(pos.coords.accuracy)
+          };
+
+          const res = await orderApi.updateOrderLiveLocation(orderRef, {
+            coordinates: coords,
+            houseNumber: editRoom || undefined,
+            instructions: editInstructions || undefined,
+            liveLocationUrl: `https://maps.google.com/?q=${coords.lat},${coords.lng}`
+          });
+
+          if (res.success) {
+            setLocationSuccess(true);
+            await fetchTracking(true);
+            setTimeout(() => {
+              setShowLocationModal(false);
+              setLocationSuccess(false);
+            }, 1800);
+          } else {
+            setLocationError(res.message || 'Failed to update live location.');
+          }
+        } catch (e) {
+          setLocationError(e.response?.data?.message || 'Error updating location.');
+        } finally {
+          setUpdatingLocation(false);
+        }
+      },
+      (err) => {
+        setUpdatingLocation(false);
+        setLocationError('Could not obtain GPS coordinates. Please grant location permissions in your browser.');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
 
   const fetchTracking = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -763,6 +822,134 @@ export default function TrackOrderPage() {
           )}
         </div>
 
+        {/* ── Pickup Location & Live GPS Pin Card ── */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
+                <span className="material-symbols-outlined text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>location_on</span>
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 text-sm">Pickup &amp; House Location</h3>
+                <p className="text-xs text-gray-400">Cleaner pickup destination and GPS pinpoint</p>
+              </div>
+            </div>
+
+            {!TERMINAL_STATUSES.has(tracking.status) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditRoom(tracking.pickupAddress?.houseNumber || '');
+                  setEditInstructions(tracking.pickupAddress?.instructions || '');
+                  setShowLocationModal(true);
+                }}
+                className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[15px]">my_location</span>
+                <span>Update GPS Pin</span>
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-3 text-sm">
+            <div className="flex justify-between py-1 border-b border-gray-50">
+              <span className="text-gray-400 text-xs uppercase font-medium">Campus Pickup Point:</span>
+              <span className="font-semibold text-gray-800 text-right">
+                {tracking.pickupAddress?.campusLocation || tracking.pickupAddress?.street || 'Main Campus'}
+              </span>
+            </div>
+
+            {tracking.pickupAddress?.houseNumber && (
+              <div className="flex justify-between py-1 border-b border-gray-50">
+                <span className="text-gray-400 text-xs uppercase font-medium">Room / House / Floor:</span>
+                <span className="font-semibold text-indigo-700 text-right">
+                  {tracking.pickupAddress.houseNumber}
+                </span>
+              </div>
+            )}
+
+            {tracking.pickupAddress?.instructions && (
+              <div className="flex justify-between py-1 border-b border-gray-50">
+                <span className="text-gray-400 text-xs uppercase font-medium">Pickup Instructions:</span>
+                <span className="text-gray-700 text-right max-w-[240px]">
+                  {tracking.pickupAddress.instructions}
+                </span>
+              </div>
+            )}
+
+            {/* GPS Pinpoint Status & Direct Navigation Link */}
+            {tracking.pickupAddress?.coordinates?.lat ? (
+              <div className="mt-3 space-y-3">
+                {/* Interactive In-App Live Map */}
+                <div className="h-64 w-full rounded-2xl overflow-hidden border border-gray-200 shadow-xs relative">
+                  <LiveNavigationMap
+                    destinationPosition={[
+                      tracking.pickupAddress.coordinates.lat,
+                      tracking.pickupAddress.coordinates.lng
+                    ]}
+                    driverPosition={
+                      tracking.providerLiveLocation?.coordinates?.lat
+                        ? [
+                            tracking.providerLiveLocation.coordinates.lat,
+                            tracking.providerLiveLocation.coordinates.lng
+                          ]
+                        : null
+                    }
+                    heading={tracking.providerLiveLocation?.coordinates?.heading || 0}
+                    speed={tracking.providerLiveLocation?.coordinates?.speed || 0}
+                    autoFollow={false}
+                    destinationLabel={tracking.customer?.name || 'My Delivery Point'}
+                    destinationSubLabel={
+                      tracking.pickupAddress.houseNumber
+                        ? `${tracking.pickupAddress.campusLocation || 'Campus'} (${tracking.pickupAddress.houseNumber})`
+                        : (tracking.pickupAddress.campusLocation || 'Campus Hub')
+                    }
+                    className="w-full h-full"
+                  />
+                  {tracking.providerLiveLocation?.isNavigating && (
+                    <div className="absolute top-3 left-3 z-10 bg-blue-600 text-white text-[11px] font-bold px-3 py-1 rounded-full shadow-lg flex items-center gap-1.5 animate-pulse">
+                      <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
+                      <span>Cleaner En Route to You</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                    <div>
+                      <span className="text-xs font-bold text-emerald-900 block">Live GPS Pin Active</span>
+                      <span className="text-[11px] text-emerald-700">
+                        {tracking.pickupAddress.coordinates.lat.toFixed(5)}, {tracking.pickupAddress.coordinates.lng.toFixed(5)}
+                      </span>
+                    </div>
+                  </div>
+                  <a
+                    href={tracking.pickupAddress.liveLocationUrl || `https://maps.google.com/?q=${tracking.pickupAddress.coordinates.lat},${tracking.pickupAddress.coordinates.lng}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-xs transition-colors"
+                  >
+                    <span>Open Maps</span>
+                    <span className="material-symbols-outlined text-[14px]">directions</span>
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex items-center justify-between">
+                <span>No live GPS coordinates pinned yet.</span>
+                <button
+                  type="button"
+                  onClick={() => setShowLocationModal(true)}
+                  className="text-amber-900 font-bold underline hover:no-underline cursor-pointer"
+                >
+                  Share GPS Now
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* ── Client Rating & Review Card ── */}
         <ClientRatingCard
           orderRef={tracking.orderRef}
@@ -799,6 +986,103 @@ export default function TrackOrderPage() {
             </Link>
           </p>
         </div>
+
+        {/* ── Modal: Update / Share Live Location ── */}
+        {showLocationModal && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-[18px]">my_location</span>
+                  </div>
+                  <h3 className="font-bold text-gray-900 text-base">Update House &amp; Live GPS Pin</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowLocationModal(false)}
+                  className="w-8 h-8 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 flex items-center justify-center"
+                >
+                  <span className="material-symbols-outlined text-lg">close</span>
+                </button>
+              </div>
+
+              <p className="text-xs text-gray-500">
+                Share your precise GPS coordinates and room number to guide the cleaner/rider directly to your door.
+              </p>
+
+              <div className="flex flex-col gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                    Room / House / Floor No.
+                  </label>
+                  <input
+                    type="text"
+                    value={editRoom}
+                    onChange={(e) => setEditRoom(e.target.value)}
+                    placeholder="e.g. Room 302, 3rd Floor"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-900 focus:bg-white focus:border-indigo-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                    Specific Landmark / Directions
+                  </label>
+                  <input
+                    type="text"
+                    value={editInstructions}
+                    onChange={(e) => setEditInstructions(e.target.value)}
+                    placeholder="e.g. Beside the main staircase"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-900 focus:bg-white focus:border-indigo-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              {locationError && (
+                <div className="bg-red-50 text-red-700 border border-red-200 rounded-xl p-3 text-xs flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-base">error</span>
+                  <span>{locationError}</span>
+                </div>
+              )}
+
+              {locationSuccess && (
+                <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl p-3 text-xs flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-base text-emerald-600">check_circle</span>
+                  <span>GPS location updated and shared with cleaner!</span>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowLocationModal(false)}
+                  className="flex-1 py-2.5 bg-gray-100 text-gray-700 font-semibold text-xs rounded-xl hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUpdateGpsLocation}
+                  disabled={updatingLocation || locationSuccess}
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {updatingLocation ? (
+                    <>
+                      <span className="material-symbols-outlined animate-spin text-[16px]">sync</span>
+                      Pinning GPS...
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-[16px]">near_me</span>
+                      Acquire &amp; Save GPS
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

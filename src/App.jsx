@@ -12,6 +12,7 @@ import PortalGateway from './pages/PortalGateway';
 import ProviderPortal from './pages/ProviderPortal';
 import AdminPortal from './pages/AdminPortal';
 import ForcePasswordChange from './pages/ForcePasswordChange';
+import ProviderNavigationPage from './pages/ProviderNavigationPage';
 import './App.css';
 
 function MaintenanceBanner() {
@@ -69,6 +70,15 @@ function AppContent() {
             element={
               <ProtectedRoute allowedRoles={['provider', 'cleaner']}>
                 <ProviderPortal />
+              </ProtectedRoute>
+            }
+          />
+          {/* Provider Live Navigation Route */}
+          <Route
+            path="/provider/navigate/:orderId"
+            element={
+              <ProtectedRoute allowedRoles={['provider', 'cleaner', 'admin']}>
+                <ProviderNavigationPage />
               </ProtectedRoute>
             }
           />

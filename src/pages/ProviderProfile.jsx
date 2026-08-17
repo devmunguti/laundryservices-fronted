@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import { systemSettingsApi } from '../api/systemSettingsApi';
 
 export default function cleanersProfile({ isStandalone = true }) {
   const { user } = useAuth();
+  const [commissionRate, setCommissionRate] = useState(15);
   const [profile, setProfile] = useState({
     businessName: user?.providerDetails?.businessName || user?.fullName || 'Cleaners Business',
     description: user?.providerDetails?.description || 'Premium laundry and dry cleaning services tailored for busy professionals.',
@@ -20,6 +22,20 @@ export default function cleanersProfile({ isStandalone = true }) {
       sunday: { active: false, open: '09:00', close: '17:00' },
     }
   });
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await systemSettingsApi.getPublicSettings();
+        if (res.success && res.data?.commissionRate !== undefined) {
+          setCommissionRate(Number(res.data.commissionRate));
+        }
+      } catch (e) {
+        // Default to 15
+      }
+    };
+    fetchSettings();
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -461,15 +477,47 @@ export default function cleanersProfile({ isStandalone = true }) {
 
           {/* Payout Destination Card */}
           <div className="bg-white rounded-xl shadow-xs overflow-hidden border border-[#c3c5d9]/10">
-            <div className="p-6 bg-[#f3f3f6] flex items-center gap-3 border-b border-[#c3c5d9]/20">
-              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                <span className="material-symbols-outlined">account_balance_wallet</span>
+            <div className="p-6 bg-[#f3f3f6] flex items-center justify-between border-b border-[#c3c5d9]/20">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <span className="material-symbols-outlined">account_balance_wallet</span>
+                </div>
+                <div>
+                  <h2 className="font-['Geist'] text-lg font-semibold text-[#1a1c1e]">Payout Destination</h2>
+                  <p className="font-['Inter'] text-xs text-[#434656]">Where your net earnings (after commission) will be transferred.</p>
+                </div>
               </div>
-              <div>
-                <h2 className="font-['Geist'] text-lg font-semibold text-[#1a1c1e]">Payout Destination</h2>
-                <p className="font-['Inter'] text-xs text-[#434656]">Where your net earnings (after commission) will be transferred.</p>
-              </div>
+              {commissionRate === 0 && (
+                <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">bolt</span>
+                  0% Commission Direct Settlement
+                </span>
+              )}
             </div>
+
+            {/* Zero Commission Banner */}
+            {commissionRate === 0 ? (
+              <div className="p-6 bg-emerald-50/70 border-b border-emerald-100 text-xs text-emerald-900 flex items-start gap-3">
+                <span className="material-symbols-outlined text-emerald-600 text-lg shrink-0 mt-0.5">verified_user</span>
+                <div className="space-y-1">
+                  <p className="font-bold text-sm text-emerald-950">Direct Settlement Active (0% Commission)</p>
+                  <p className="text-emerald-800 leading-relaxed">
+                    Platform commission is currently set to <strong>0%</strong>. All customer payments flow 100% directly to your registered Buy Goods Till / payment method upon checkout. Payout destination configuration is disabled because the platform does not hold escrow funds.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 bg-blue-50/70 border-b border-blue-100 text-xs text-blue-900 flex items-start gap-3">
+                <span className="material-symbols-outlined text-blue-600 text-lg shrink-0 mt-0.5">info</span>
+                <div className="space-y-1">
+                  <p className="font-bold text-sm text-blue-950">Platform Till Commission Escrow Active ({commissionRate}%)</p>
+                  <p className="text-blue-800 leading-relaxed">
+                    Orders processed via the official platform till incur a <strong>{commissionRate}%</strong> platform fee. Net proceeds are disbursed to the M-Pesa phone number configured below.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="flex flex-col gap-1.5">
                 <label className="font-['Geist'] text-sm font-medium text-[#1a1c1e]">Payout Method</label>
@@ -486,10 +534,20 @@ export default function cleanersProfile({ isStandalone = true }) {
                 <input
                   type="tel"
                   placeholder="e.g. 0712345678"
+                  disabled={commissionRate === 0}
                   value={profile.payoutPhone || ''}
                   onChange={(e) => setProfile({ ...profile, payoutPhone: e.target.value })}
-                  className="bg-[#f9f9fc] rounded-lg border border-[#c3c5d9]/30 px-4 py-3 font-['Inter'] text-sm text-[#1a1c1e] focus:outline-none focus:ring-2 focus:ring-[#0052ff] focus:bg-white transition-colors shadow-xs"
+                  className={`rounded-lg border border-[#c3c5d9]/30 px-4 py-3 font-['Inter'] text-sm text-[#1a1c1e] transition-colors shadow-xs ${
+                    commissionRate === 0
+                      ? 'bg-[#e8e8ea] text-[#737688] cursor-not-allowed opacity-75'
+                      : 'bg-[#f9f9fc] focus:outline-none focus:ring-2 focus:ring-[#0052ff] focus:bg-white'
+                  }`}
                 />
+                {commissionRate === 0 && (
+                  <span className="text-[11px] text-emerald-700 font-medium mt-1">
+                    Disabled: Direct settlement is active for your account.
+                  </span>
+                )}
               </div>
             </div>
           </div>

@@ -39,5 +39,28 @@ export const systemSettingsApi = {
   getPublicSettings: async () => {
     const response = await api.get('/public/settings');
     return response.data;
+  },
+
+  /**
+   * Campus Locations Management
+   */
+  getCampusLocations: async () => {
+    const response = await api.get('/admin/settings/campus-locations');
+    return response.data;
+  },
+
+  addCampusLocation: async (locationData) => {
+    const response = await api.post('/admin/settings/campus-locations', locationData);
+    return response.data;
+  },
+
+  updateCampusLocation: async (locationId, locationData) => {
+    const response = await api.put(`/admin/settings/campus-locations/${locationId}`, locationData);
+    return response.data;
+  },
+
+  deleteCampusLocation: async (locationId) => {
+    const response = await api.delete(`/admin/settings/campus-locations/${locationId}`);
+    return response.data;
   }
 };

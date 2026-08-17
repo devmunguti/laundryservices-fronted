@@ -42,27 +42,45 @@ export default function cleanersOrders({ isStandalone = true }) {
 
       if (ordersRes.success && ordersRes.data) {
         const rawList = ordersRes.data.orders || [];
-        const formatted = rawList.map((o) => ({
-          id: o.orderRef || `#ORD-${o._id.slice(-6).toUpperCase()}`,
-          rawId: o._id,
-          customer: o.customer?.fullName || 'Guest Customer',
-          avatarInitials: (o.customer?.fullName || 'GC').split(' ').map(n => n[0]).join('').slice(0, 2),
-          avatarBg: 'bg-[#dde1ff] text-[#001452]',
-          address: o.pickupAddress?.street || 'Nairobi',
-          service: o.items?.[0]?.name || 'Standard Wash',
-          serviceIcon: 'local_laundry_service',
-          itemCount: `${o.items?.length || 1} item(s)`,
-          date: new Date(o.createdAt || Date.now()).toLocaleDateString(),
-          time: new Date(o.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          status: (o.status || 'Pending').toLowerCase().replace(/_/g, '-'),
-          rawStatus: o.status || 'Pending',
-          statusLabel: (o.status || 'Pending').replace(/_/g, ' '),
-          statusBg: o.status === 'Cancelled' ? 'bg-[#eeeef0] text-[#737688]' : o.status === 'Delivered' ? 'bg-emerald-100 text-emerald-800' : 'bg-[#c2e8ff]/40 text-[#004d67]',
-          statusDot: o.status === 'Cancelled' ? 'bg-[#737688]' : o.status === 'Delivered' ? 'bg-emerald-600' : 'bg-[#006688]',
-          amount: `KES ${(o.pricing?.grandTotal || o.totalAmount || 0).toLocaleString()}`,
-          transactionId: o.payment?.transactionId || null,
-          paymentStatus: o.paymentStatus || 'Pending'
-        }));
+        const formatted = rawList.map((o) => {
+          const custName = o.customerDetails?.fullName || o.customer?.fullName || 'Guest Customer';
+          const custPhone = o.customerDetails?.phone || o.customer?.phone || o.payment?.phoneNumber || '';
+          const custEmail = o.customerDetails?.email || o.customer?.email || '';
+          const campusLoc = o.pickupAddress?.campusLocation || o.pickupAddress?.street || 'Nairobi';
+          const roomNo = o.pickupAddress?.houseNumber || '';
+          const instruct = o.pickupAddress?.instructions || o.notes || '';
+          const coords = o.pickupAddress?.coordinates || null;
+          const mapUrl = o.pickupAddress?.liveLocationUrl || (coords?.lat ? `https://maps.google.com/?q=${coords.lat},${coords.lng}` : '');
+
+          return {
+            id: o.orderRef || `#ORD-${o._id.slice(-6).toUpperCase()}`,
+            rawId: o._id,
+            customer: custName,
+            customerPhone: custPhone,
+            customerEmail: custEmail,
+            campusLocation: campusLoc,
+            houseNumber: roomNo,
+            instructions: instruct,
+            coordinates: coords,
+            liveLocationUrl: mapUrl,
+            avatarInitials: custName.split(' ').map(n => n[0]).join('').slice(0, 2),
+            avatarBg: 'bg-[#dde1ff] text-[#001452]',
+            address: roomNo ? `${campusLoc} (${roomNo})` : campusLoc,
+            service: o.items?.[0]?.name || 'Standard Wash',
+            serviceIcon: 'local_laundry_service',
+            itemCount: `${o.items?.length || 1} item(s)`,
+            date: new Date(o.createdAt || Date.now()).toLocaleDateString(),
+            time: new Date(o.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: (o.status || 'Pending').toLowerCase().replace(/_/g, '-'),
+            rawStatus: o.status || 'Pending',
+            statusLabel: (o.status || 'Pending').replace(/_/g, ' '),
+            statusBg: o.status === 'Cancelled' ? 'bg-[#eeeef0] text-[#737688]' : o.status === 'Delivered' ? 'bg-emerald-100 text-emerald-800' : 'bg-[#c2e8ff]/40 text-[#004d67]',
+            statusDot: o.status === 'Cancelled' ? 'bg-[#737688]' : o.status === 'Delivered' ? 'bg-emerald-600' : 'bg-[#006688]',
+            amount: `KES ${(o.pricing?.grandTotal || o.totalAmount || 0).toLocaleString()}`,
+            transactionId: o.payment?.transactionId || null,
+            paymentStatus: o.paymentStatus || 'Pending'
+          };
+        });
         setOrders(formatted);
       }
 
@@ -296,11 +314,21 @@ export default function cleanersOrders({ isStandalone = true }) {
                     <td className="px-6 py-6">
                       <div className="flex items-center justify-center gap-1">
                         <button
-                          onClick={() => setSelectedOrder(ord)}
+                          onClick={() => {
+                            setSelectedOrder(ord);
+                            setIsDetailsModalOpen(true);
+                          }}
                           className="w-8 h-8 rounded-full hover:bg-[#e8e8ea] flex items-center justify-center text-[#434656] hover:text-[#003ec7] transition-colors cursor-pointer"
                           title="View Details"
                         >
                           <span className="material-symbols-outlined text-[18px]">visibility</span>
+                        </button>
+                        <button
+                          onClick={() => navigate(`/provider/navigate/${ord.rawId || ord.id}`)}
+                          className="w-8 h-8 rounded-full bg-blue-50 hover:bg-blue-100 flex items-center justify-center text-blue-600 transition-colors cursor-pointer shadow-2xs"
+                          title="Start Live In-App Navigation"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">navigation</span>
                         </button>
                         <button
                           onClick={() => setUpdatingOrderId(ord.id)}
@@ -375,16 +403,97 @@ export default function cleanersOrders({ isStandalone = true }) {
               </span>
             </div>
             <div className="space-y-3 border-t border-[#c3c5d9]/30 pt-4 text-sm font-['Inter']">
-              <div>
-                <span className="text-xs text-[#434656] block">Customer</span>
-                <span className="font-medium text-[#1a1c1e]">{selectedOrder.customer} ({selectedOrder.address})</span>
+              {/* Customer Contact & Live House Destination */}
+              <div className="bg-gradient-to-br from-blue-50/80 to-indigo-50/50 border border-blue-200/70 rounded-2xl p-4 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] text-blue-700 font-bold uppercase tracking-wider block">Customer &amp; Location</span>
+                    <h4 className="font-bold text-slate-900 text-sm">{selectedOrder.customer}</h4>
+                  </div>
+                  {selectedOrder.customerPhone && (
+                    <div className="flex items-center gap-1.5">
+                      <a
+                        href={`tel:${selectedOrder.customerPhone}`}
+                        className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 transition-colors shadow-xs"
+                        title="Direct Call"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">call</span>
+                      </a>
+                      <a
+                        href={`https://wa.me/${selectedOrder.customerPhone.replace(/[^0-9]/g, '')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center hover:bg-emerald-700 transition-colors shadow-xs"
+                        title="WhatsApp Chat"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">chat</span>
+                      </a>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1 text-xs text-slate-700">
+                  <p className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[15px] text-blue-600">location_city</span>
+                    <span><strong>Pickup Station:</strong> {selectedOrder.campusLocation}</span>
+                  </p>
+                  {selectedOrder.houseNumber && (
+                    <p className="flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[15px] text-indigo-600">meeting_room</span>
+                      <span><strong>Room / House / Floor:</strong> {selectedOrder.houseNumber}</span>
+                    </p>
+                  )}
+                  {selectedOrder.instructions && (
+                    <p className="flex items-center gap-1.5 text-slate-600 italic">
+                      <span className="material-symbols-outlined text-[15px] text-slate-400">notes</span>
+                      <span>"{selectedOrder.instructions}"</span>
+                    </p>
+                  )}
+                  {selectedOrder.customerPhone && (
+                    <p className="flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[15px] text-slate-500">phone</span>
+                      <span>{selectedOrder.customerPhone}</span>
+                    </p>
+                  )}
+                  {selectedOrder.customerEmail && (
+                    <p className="flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[15px] text-slate-500">mail</span>
+                      <span>{selectedOrder.customerEmail}</span>
+                    </p>
+                  )}
+                </div>
+
+                {/* In-System Live Navigation & External Map Buttons */}
+                <div className="flex flex-col gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/provider/navigate/${selectedOrder.rawId || selectedOrder.id}`)}
+                    className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">navigation</span>
+                    <span>Start In-App Live Navigation (Uber Mode)</span>
+                  </button>
+
+                  {selectedOrder.liveLocationUrl ? (
+                    <a
+                      href={selectedOrder.liveLocationUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] rounded-lg flex items-center justify-center gap-1 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+                      <span>Open External Google Maps</span>
+                    </a>
+                  ) : null}
+                </div>
               </div>
+
               <div>
                 <span className="text-xs text-[#434656] block">Service Type</span>
                 <span className="font-medium text-[#1a1c1e]">{selectedOrder.service} • {selectedOrder.itemCount}</span>
               </div>
               <div>
-                <span className="text-xs text-[#434656] block">Date & Time</span>
+                <span className="text-xs text-[#434656] block">Date &amp; Time</span>
                 <span className="font-medium text-[#1a1c1e]">{selectedOrder.date} at {selectedOrder.time}</span>
               </div>
 
