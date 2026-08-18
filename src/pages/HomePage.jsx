@@ -98,7 +98,7 @@ export default function HomePage() {
 
     const matchesSearch = !q || nameMatch || catMatch || providerMatch;
     const matchesCategory = selectedHomeCategory === 'All' || service.category?.toLowerCase() === selectedHomeCategory.toLowerCase();
-    
+
     let matchesPrice = true;
     const price = service.basePrice || 0;
     if (selectedPriceFilter === 'budget') {
@@ -142,8 +142,8 @@ export default function HomePage() {
                   type="button"
                   onClick={() => setActiveNav(item.id)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all group ${isActive
-                      ? 'bg-primary-container text-on-primary-container font-semibold shadow-sm'
-                      : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                    ? 'bg-primary-container text-on-primary-container font-semibold shadow-sm'
+                    : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                     }`}
                 >
                   <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
@@ -272,11 +272,10 @@ export default function HomePage() {
                   <button
                     type="button"
                     onClick={() => setHomeSort('rating_desc')}
-                    className={`px-3 py-1.5 rounded-full font-semibold transition-all cursor-pointer flex items-center gap-1 ${
-                      homeSort === 'rating_desc'
+                    className={`px-3 py-1.5 rounded-full font-semibold transition-all cursor-pointer flex items-center gap-1 ${homeSort === 'rating_desc'
                         ? 'bg-primary text-on-primary shadow-xs'
                         : 'text-on-surface-variant hover:text-on-surface'
-                    }`}
+                      }`}
                   >
                     <span className="material-symbols-outlined text-[14px]">star</span>
                     <span>Top Rated</span>
@@ -285,11 +284,10 @@ export default function HomePage() {
                   <button
                     type="button"
                     onClick={() => setHomeSort('cheap')}
-                    className={`px-3 py-1.5 rounded-full font-semibold transition-all cursor-pointer flex items-center gap-1 ${
-                      homeSort === 'cheap'
+                    className={`px-3 py-1.5 rounded-full font-semibold transition-all cursor-pointer flex items-center gap-1 ${homeSort === 'cheap'
                         ? 'bg-emerald-600 text-white shadow-xs'
                         : 'text-on-surface-variant hover:text-on-surface'
-                    }`}
+                      }`}
                   >
                     <span className="material-symbols-outlined text-[14px]">payments</span>
                     <span>Cheapest</span>
@@ -366,8 +364,8 @@ export default function HomePage() {
                         key={service._id}
                         onClick={() => navigate('/checkout', { state: checkoutState })}
                         className={`bg-surface-container-lowest rounded-[16px] p-6 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between h-[280px] border ${isPromotedService
-                            ? 'border-blue-500/40 ring-1 ring-blue-500/20 bg-gradient-to-b from-blue-50/20 to-white'
-                            : 'border-transparent hover:border-primary/20'
+                          ? 'border-blue-500/40 ring-1 ring-blue-500/20 bg-gradient-to-b from-blue-50/20 to-white'
+                          : 'border-transparent hover:border-primary/20'
                           }`}
                       >
                         <div className="flex items-start justify-between">
@@ -522,7 +520,7 @@ export default function HomePage() {
 
           {/* Footer */}
           <footer className="w-full py-6 mt-16 text-center text-on-surface-variant font-body-sm text-body-sm border-t border-outline-variant/20">
-            <p>© 2026 {settings?.platformName || 'Aura Laundry'}. All rights reserved.</p>
+            <p>© 2026 {settings?.platformName || 'Laundry'}. All rights reserved.</p>
             <p className="text-xs text-outline mt-1">Support: {settings?.supportEmail || 'support@auralaundry.co.ke'} | {settings?.supportPhone || '+254 700 000 000'}</p>
           </footer>
         </div>

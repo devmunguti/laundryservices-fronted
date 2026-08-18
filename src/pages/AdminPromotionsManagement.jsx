@@ -22,8 +22,8 @@ export default function AdminPromotionsManagement({ isStandalone = true }) {
     accountNumber: 'AURA-PROMO',
     tillNumber: '8995354',
     phoneNumber: '0712345678',
-    recipientName: 'Aura Laundry Admin',
-    businessName: 'Aura Laundry Platform',
+    recipientName: 'Laundry Admin',
+    businessName: 'Laundry Platform',
     instructions: 'Pay the promotion fee using the M-Pesa details above, then submit your M-Pesa transaction code for Admin verification.',
     packages: [
       { id: '7_Days', name: '7 Days Featured Placement', days: 7, price: 1000, description: 'Top ranking and Featured Promoted badge for 1 week' },
@@ -62,8 +62,8 @@ export default function AdminPromotionsManagement({ isStandalone = true }) {
           accountNumber: settingsRes.data.accountNumber || 'AURA-PROMO',
           tillNumber: settingsRes.data.tillNumber || '8995354',
           phoneNumber: settingsRes.data.phoneNumber || '0712345678',
-          recipientName: settingsRes.data.recipientName || 'Aura Laundry Admin',
-          businessName: settingsRes.data.businessName || 'Aura Laundry Platform',
+          recipientName: settingsRes.data.recipientName || 'Laundry Admin',
+          businessName: settingsRes.data.businessName || 'Laundry Platform',
           instructions: settingsRes.data.instructions || '',
           packages: settingsRes.data.packages?.length > 0 ? settingsRes.data.packages : [
             { id: '7_Days', name: '7 Days Featured Placement', days: 7, price: 1000, description: 'Top ranking and Featured Promoted badge for 1 week' },
@@ -189,8 +189,8 @@ export default function AdminPromotionsManagement({ isStandalone = true }) {
       {feedbackMsg.text && (
         <div
           className={`p-4 rounded-2xl text-sm font-medium flex items-center gap-2 ${feedbackMsg.type === 'success'
-              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-              : 'bg-rose-50 text-rose-800 border border-rose-200'
+            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+            : 'bg-rose-50 text-rose-800 border border-rose-200'
             }`}
         >
           <span className="material-symbols-outlined text-[20px]">
@@ -269,8 +269,8 @@ export default function AdminPromotionsManagement({ isStandalone = true }) {
                 key={tab}
                 onClick={() => setStatusFilter(tab)}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${statusFilter === tab
-                    ? 'bg-white text-blue-600 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-blue-600 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
                   }`}
               >
                 {tab === 'All' ? 'All Requests' : tab}
@@ -358,10 +358,10 @@ export default function AdminPromotionsManagement({ isStandalone = true }) {
                       <td className="py-4 px-4">
                         <span
                           className={`px-2.5 py-1 rounded-full text-xs font-bold ${req.status === 'Pending'
-                              ? 'bg-amber-100 text-amber-800'
-                              : req.status === 'Approved'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-rose-100 text-rose-800'
+                            ? 'bg-amber-100 text-amber-800'
+                            : req.status === 'Approved'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-rose-100 text-rose-800'
                             }`}
                         >
                           {req.status}
@@ -530,8 +530,8 @@ export default function AdminPromotionsManagement({ isStandalone = true }) {
                           type="button"
                           onClick={() => setSettingsForm({ ...settingsForm, channelType: ch.id })}
                           className={`p-3 rounded-2xl border-2 text-center transition-all flex flex-col items-center gap-1 cursor-pointer ${isSelected
-                              ? 'border-blue-600 bg-blue-50/60 text-blue-700 font-bold shadow-xs'
-                              : 'border-slate-200 hover:border-slate-300 text-slate-600 bg-white'
+                            ? 'border-blue-600 bg-blue-50/60 text-blue-700 font-bold shadow-xs'
+                            : 'border-slate-200 hover:border-slate-300 text-slate-600 bg-white'
                             }`}
                         >
                           <span className="material-symbols-outlined text-[20px]">{ch.icon}</span>
@@ -597,7 +597,7 @@ export default function AdminPromotionsManagement({ isStandalone = true }) {
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. Aura Laundry Hub"
+                        placeholder="e.g. Laundry Hub"
                         value={settingsForm.businessName}
                         onChange={(e) => setSettingsForm({ ...settingsForm, businessName: e.target.value })}
                         className="w-full bg-slate-50 py-2.5 px-3.5 rounded-xl text-sm text-slate-900 border border-slate-200 outline-none focus:border-blue-600 focus:bg-white"

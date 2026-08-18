@@ -53,7 +53,7 @@ export default function Navbar() {
             ) : (
               <span className="brand-icon">🧺</span>
             )}
-            <span className="brand-name">{settings?.platformName || 'Aura Laundry'}</span>
+            <span className="brand-name">{settings?.platformName || 'Laundry'}</span>
           </Link>
 
           <nav className="navbar-links">

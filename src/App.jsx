@@ -26,7 +26,7 @@ function MaintenanceBanner() {
     <div className="bg-amber-500 text-slate-900 font-label-md px-4 py-3 text-center flex items-center justify-center gap-2 shadow-md">
       <span className="material-symbols-outlined text-[20px]">engineering</span>
       <span>
-        <strong>Scheduled Maintenance:</strong> {settings?.platformName || 'Aura Laundry'} is currently undergoing system updates. Customer order placements are temporarily restricted.
+        <strong>Scheduled Maintenance:</strong> {settings?.platformName || 'Laundry'} is currently undergoing system updates. Customer order placements are temporarily restricted.
       </span>
     </div>
   );

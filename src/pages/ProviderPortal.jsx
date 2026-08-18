@@ -110,7 +110,7 @@ export default function ProviderPortal() {
             ) : (
               <span className="material-symbols-outlined text-[#0052ff] text-2xl">local_laundry_service</span>
             )}
-            <span className="font-['Geist'] font-bold text-lg text-[#1a1c1e]">{settings?.platformName || 'Aura Laundry'}</span>
+            <span className="font-['Geist'] font-bold text-lg text-[#1a1c1e]">{settings?.platformName || 'Laundry'}</span>
           </div>
 
           <button
@@ -129,8 +129,8 @@ export default function ProviderPortal() {
                 key={item.id}
                 onClick={() => handleTabChange(item.id)}
                 className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all gap-3 text-left font-['Geist'] text-sm font-medium cursor-pointer ${isActive
-                    ? 'bg-[#0052ff] text-[#dfe3ff] shadow-xs'
-                    : 'text-[#434656] hover:bg-[#e8e8ea] hover:text-[#1a1c1e]'
+                  ? 'bg-[#0052ff] text-[#dfe3ff] shadow-xs'
+                  : 'text-[#434656] hover:bg-[#e8e8ea] hover:text-[#1a1c1e]'
                   }`}
               >
                 <div className="flex items-center gap-3">
@@ -155,8 +155,8 @@ export default function ProviderPortal() {
                 key={item.id}
                 onClick={() => handleTabChange(item.id)}
                 className={`w-full flex items-center px-4 py-3 rounded-xl transition-all gap-3 text-left font-['Geist'] text-sm font-medium cursor-pointer ${isActive
-                    ? 'bg-[#0052ff] text-[#dfe3ff]'
-                    : 'text-[#434656] hover:bg-[#e8e8ea] hover:text-[#1a1c1e]'
+                  ? 'bg-[#0052ff] text-[#dfe3ff]'
+                  : 'text-[#434656] hover:bg-[#e8e8ea] hover:text-[#1a1c1e]'
                   }`}
               >
                 <span className="material-symbols-outlined text-[22px]">{item.icon}</span>
@@ -688,9 +688,8 @@ function DashboardView({ onNavigateTab, dateRange, setDateRange, isDateDropdownO
             </button>
             <div className="flex items-center gap-3 mb-4">
               <span className="font-mono text-xl font-bold text-[#003ec7]">{selectedOrder.id}</span>
-              <span className={`px-2.5 py-0.5 text-xs rounded-full font-semibold uppercase ${
-                selectedOrder.status === 'delivered' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-              }`}>
+              <span className={`px-2.5 py-0.5 text-xs rounded-full font-semibold uppercase ${selectedOrder.status === 'delivered' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                }`}>
                 {selectedOrder.statusLabel}
               </span>
             </div>
@@ -711,11 +710,10 @@ function DashboardView({ onNavigateTab, dateRange, setDateRange, isDateDropdownO
                     <span className="material-symbols-outlined text-green-600 text-sm">phone_iphone</span>
                     M-Pesa Transaction Code
                   </span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    selectedOrder.paymentStatus === 'Paid' || selectedOrder.payment === 'M-Pesa Paid'
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${selectedOrder.paymentStatus === 'Paid' || selectedOrder.payment === 'M-Pesa Paid'
                       ? 'bg-emerald-100 text-emerald-800'
                       : 'bg-amber-100 text-amber-800'
-                  }`}>
+                    }`}>
                     {selectedOrder.paymentStatus === 'Paid' ? 'Paid' : 'Pending'}
                   </span>
                 </div>
@@ -834,7 +832,7 @@ function PromotionsView() {
   const [promoSettings, setPromoSettings] = useState({
     paybillNumber: '522522',
     accountNumber: 'AURA-PROMO',
-    businessName: 'Aura Laundry Platform',
+    businessName: 'Laundry Platform',
     instructions: 'Pay the promotion fee to the M-Pesa Paybill above, then submit your M-Pesa transaction code for Admin verification.',
     packages: [
       { id: '7_Days', name: '7 Days Featured Placement', days: 7, price: 1000, description: 'Top ranking and Featured Promoted badge for 1 week' },
@@ -947,7 +945,7 @@ function PromotionsView() {
             </span>
           </div>
           <p className="text-base text-[#434656] mt-1">
-            Get top placement on the Aura Laundry homepage and attract 3x more customers.
+            Get top placement on the Laundry homepage and attract 3x more customers.
           </p>
         </div>
       </div>
@@ -1012,11 +1010,10 @@ function PromotionsView() {
                   <div
                     key={pkg.id}
                     onClick={() => setSelectedPackage(pkg.id)}
-                    className={`rounded-2xl p-5 border-2 cursor-pointer transition-all flex flex-col justify-between relative ${
-                      isSelected
+                    className={`rounded-2xl p-5 border-2 cursor-pointer transition-all flex flex-col justify-between relative ${isSelected
                         ? 'border-blue-600 bg-blue-50/50 shadow-sm'
                         : 'border-[#c3c5d9]/30 hover:border-blue-400 bg-white'
-                    }`}
+                      }`}
                   >
                     {isSelected && (
                       <span className="absolute top-3 right-3 material-symbols-outlined text-blue-600 text-[20px]">
@@ -1081,7 +1078,7 @@ function PromotionsView() {
                     <div>
                       <span className="text-[11px] font-semibold uppercase text-slate-400 block">Store / Merchant Name</span>
                       <span className="text-sm font-bold text-slate-900 truncate">
-                        {promoSettings.businessName || 'Aura Laundry Platform'}
+                        {promoSettings.businessName || 'Laundry Platform'}
                       </span>
                     </div>
                     <span className="material-symbols-outlined text-emerald-600 text-[20px]">verified</span>
@@ -1115,7 +1112,7 @@ function PromotionsView() {
                     <div>
                       <span className="text-[11px] font-semibold uppercase text-slate-400 block">Recipient Name</span>
                       <span className="text-sm font-bold text-slate-900 truncate">
-                        {promoSettings.recipientName || 'Aura Laundry Admin'}
+                        {promoSettings.recipientName || 'Laundry Admin'}
                       </span>
                     </div>
                     <span className="material-symbols-outlined text-emerald-600 text-[20px]">person</span>

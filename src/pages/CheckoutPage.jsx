@@ -4,6 +4,7 @@ import { orderApi } from '../api/orderApi';
 import { paymentApi } from '../api/paymentApi';
 import { systemSettingsApi } from '../api/systemSettingsApi';
 import { useAuth } from '../hooks/useAuth';
+import PickupLocationPicker from '../components/navigation/PickupLocationPicker';
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
@@ -47,9 +48,6 @@ export default function CheckoutPage() {
 
   // Live GPS Location Pin State
   const [gpsCoords, setGpsCoords] = useState(null);
-  const [gpsLoading, setGpsLoading] = useState(false);
-  const [gpsError, setGpsError] = useState('');
-  const [gpsLocked, setGpsLocked] = useState(false);
 
   // Payment states
   const [phone, setPhone] = useState(user?.phone || '');
@@ -111,38 +109,6 @@ export default function CheckoutPage() {
     };
     fetchCampusLocs();
   }, []);
-
-  // Browser Geolocation API Handler
-  const handleShareLiveLocation = () => {
-    setGpsError('');
-    if (!navigator.geolocation) {
-      setGpsError('Geolocation is not supported by your browser.');
-      return;
-    }
-
-    setGpsLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const coords = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: Math.round(position.coords.accuracy)
-        };
-        setGpsCoords(coords);
-        setGpsLocked(true);
-        setGpsLoading(false);
-      },
-      (err) => {
-        setGpsLoading(false);
-        if (err.code === 1) {
-          setGpsError('Location permission denied. Please allow location access in your browser settings.');
-        } else {
-          setGpsError('Could not acquire your GPS location. Please try again or type your room number.');
-        }
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    );
-  };
 
   const copyToClipboard = (text) => {
     if (navigator.clipboard) {
@@ -218,7 +184,11 @@ export default function CheckoutPage() {
       return activeOrder;
     }
 
-    const isCustom = selectedCampusLocation === 'Custom House / Apartment Address';
+    const isCustom =
+      selectedCampusLocation === 'Custom House / Apartment Address' ||
+      selectedCampusLocation === 'Not on the list (Custom Location)' ||
+      selectedCampusLocation === 'CUSTOM_LOCATION' ||
+      !selectedCampusLocation;
     const effectiveStreet = isCustom ? (customStreet || 'Nairobi') : selectedCampusLocation;
 
     const orderRes = await orderApi.createOrder({
@@ -528,150 +498,21 @@ export default function CheckoutPage() {
                   />
                 </div>
 
-                {/* Campus Pickup Place Selector (Admin Configured) */}
-                <div className="flex flex-col gap-1 pt-2 border-t border-surface-variant/40">
-                  <label className="text-xs font-semibold text-on-surface flex items-center justify-between">
-                    <span className="flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[16px] text-primary">location_city</span>
-                      Campus Pickup Hub / Station
-                    </span>
-                    <span className="text-[11px] text-primary font-medium">Admin Configured Places</span>
-                  </label>
-                  <select
-                    value={selectedCampusLocation}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setSelectedCampusLocation(val);
-                      const loc = campusLocations.find(l => l.name === val);
-                      if (loc && loc.instructions) {
-                        setPickupInstructions(loc.instructions);
-                      }
-                    }}
-                    className="w-full bg-[#F1F5F9] rounded-lg px-3.5 py-3 text-sm text-on-surface border border-transparent focus:bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all cursor-pointer font-medium"
-                  >
-                    {campusLocations.map((loc, idx) => (
-                      <option key={idx} value={loc.name}>
-                        {loc.name} {loc.zone ? `(${loc.zone})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Custom Address input if custom selected */}
-                {selectedCampusLocation === 'Custom House / Apartment Address' && (
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-on-surface">
-                      Custom Street / Building Name
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Apex Court, Along University Way"
-                      value={customStreet}
-                      onChange={(e) => setCustomStreet(e.target.value)}
-                      className="w-full bg-[#F1F5F9] rounded-lg px-3.5 py-3 text-sm text-on-surface border border-transparent focus:bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
-                    />
-                  </div>
-                )}
-
-                {/* Room / House / Hostel Floor Number */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-on-surface flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[16px] text-secondary">meeting_room</span>
-                      <span>Room / House / Apartment No.</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Room 204, 2nd Floor"
-                      value={houseNumber}
-                      onChange={(e) => setHouseNumber(e.target.value)}
-                      className="w-full bg-[#F1F5F9] rounded-lg px-3.5 py-3 text-sm text-on-surface border border-transparent focus:bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-on-surface flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[16px] text-tertiary">notes</span>
-                      <span>Pickup Notes / Landmark</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Near the main water dispenser"
-                      value={pickupInstructions}
-                      onChange={(e) => setPickupInstructions(e.target.value)}
-                      className="w-full bg-[#F1F5F9] rounded-lg px-3.5 py-3 text-sm text-on-surface border border-transparent focus:bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
-                    />
-                  </div>
-                </div>
-
-                {/* Live GPS Location Pin Feature */}
-                <div className="mt-2 bg-gradient-to-r from-blue-50/70 to-indigo-50/50 border border-blue-200/60 rounded-xl p-4 flex flex-col gap-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                        <span className="material-symbols-outlined text-[18px]">my_location</span>
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-bold text-slate-900">Share Live GPS House Location</h4>
-                        <p className="text-[11px] text-slate-600">Enables turn-by-turn Google Maps navigation for cleaner/rider.</p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleShareLiveLocation}
-                      disabled={gpsLoading}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
-                        gpsLocked
-                          ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                          : 'bg-primary text-on-primary hover:bg-primary/90'
-                      }`}
-                    >
-                      {gpsLoading ? (
-                        <>
-                          <span className="material-symbols-outlined animate-spin text-[16px]">sync</span>
-                          Locating...
-                        </>
-                      ) : gpsLocked ? (
-                        <>
-                          <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                          GPS Locked
-                        </>
-                      ) : (
-                        <>
-                          <span className="material-symbols-outlined text-[16px]">near_me</span>
-                          Pin My Live Location
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {gpsLocked && gpsCoords && (
-                    <div className="bg-white/80 border border-emerald-300 rounded-lg p-2.5 flex items-center justify-between text-xs text-emerald-900">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                        <span>
-                          <strong>GPS Coordinates:</strong> {gpsCoords.lat.toFixed(5)}, {gpsCoords.lng.toFixed(5)} (±{gpsCoords.accuracy}m precision)
-                        </span>
-                      </div>
-                      <a
-                        href={`https://maps.google.com/?q=${gpsCoords.lat},${gpsCoords.lng}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-blue-600 hover:underline font-semibold flex items-center gap-1 text-[11px]"
-                      >
-                        <span>Preview on Maps</span>
-                        <span className="material-symbols-outlined text-[14px]">open_in_new</span>
-                      </a>
-                    </div>
-                  )}
-
-                  {gpsError && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-2 text-xs text-red-700 flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-[16px]">error</span>
-                      <span>{gpsError}</span>
-                    </div>
-                  )}
+                {/* Pickup Location, Campus Hubs, OSM Place Search & Live Map */}
+                <div className="pt-2 border-t border-surface-variant/40">
+                  <PickupLocationPicker
+                    campusLocations={campusLocations}
+                    selectedCampusLocation={selectedCampusLocation}
+                    onSelectCampusLocation={setSelectedCampusLocation}
+                    customStreet={customStreet}
+                    onChangeCustomStreet={setCustomStreet}
+                    houseNumber={houseNumber}
+                    onChangeHouseNumber={setHouseNumber}
+                    pickupInstructions={pickupInstructions}
+                    onChangePickupInstructions={setPickupInstructions}
+                    gpsCoords={gpsCoords}
+                    onGpsCoordsChange={setGpsCoords}
+                  />
                 </div>
               </div>
             </section>
@@ -834,11 +675,10 @@ export default function CheckoutPage() {
                   type="button"
                   id="manual-mode-code"
                   onClick={() => { setManualInputMode('code'); setConfirmError(''); }}
-                  className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                    manualInputMode === 'code'
+                  className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${manualInputMode === 'code'
                       ? 'bg-surface-container-lowest shadow-sm text-primary'
                       : 'text-outline hover:text-on-surface'
-                  }`}
+                    }`}
                 >
                   <span className="material-symbols-outlined text-sm">pin</span>
                   Enter Code
@@ -847,11 +687,10 @@ export default function CheckoutPage() {
                   type="button"
                   id="manual-mode-message"
                   onClick={() => { setManualInputMode('message'); setConfirmError(''); }}
-                  className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                    manualInputMode === 'message'
+                  className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${manualInputMode === 'message'
                       ? 'bg-surface-container-lowest shadow-sm text-primary'
                       : 'text-outline hover:text-on-surface'
-                  }`}
+                    }`}
                 >
                   <span className="material-symbols-outlined text-sm">sms</span>
                   Paste SMS
@@ -891,7 +730,7 @@ export default function CheckoutPage() {
                       className={`w-full bg-[#F1F5F9] rounded-lg px-4 py-3 font-body-sm text-on-surface placeholder:text-outline transition-all duration-200 outline-none focus:bg-white focus:ring-1 focus:ring-primary resize-none ${confirmError ? 'ring-1 ring-error bg-error-container/20' : ''}`}
                       id="mpesa-message"
                       rows={4}
-                      placeholder={"Paste your full M-Pesa SMS here...\n\nExample:\nQKT1234567 Confirmed.\nKsh1,200.00 sent to AURA LAUNDRY\non 15/8/26 at 2:30 PM"}
+                      placeholder={"Paste your full M-Pesa SMS here...\n\nExample:\nQKT1234567 Confirmed.\nKsh1,200.00 sent to Laundry\non 15/8/26 at 2:30 PM"}
                       value={mpesaMessage}
                       onChange={(e) => {
                         setMpesaMessage(e.target.value);

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 
 /**
- * Reusable ConfirmationModal Component for Aura Laundry Platform
+ * Reusable ConfirmationModal Component for Laundry Platform
  * Replaces native browser alert/confirm dialogs with an accessible, high-fidelity UI dialog.
  */
 export default function ConfirmationModal({
@@ -74,19 +74,17 @@ export default function ConfirmationModal({
       >
         {/* Top Accent Strip */}
         <div
-          className={`absolute top-0 left-0 right-0 h-1.5 ${
-            isDanger ? 'bg-rose-600' : 'bg-amber-500'
-          }`}
+          className={`absolute top-0 left-0 right-0 h-1.5 ${isDanger ? 'bg-rose-600' : 'bg-amber-500'
+            }`}
         />
 
         {/* Icon & Title Header */}
         <div className="flex items-start gap-4">
           <div
-            className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
-              isDanger
+            className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${isDanger
                 ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400'
                 : 'bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400'
-            }`}
+              }`}
           >
             <span
               className="material-symbols-outlined text-[28px]"
@@ -125,11 +123,10 @@ export default function ConfirmationModal({
         {/* Descriptive Warning Callout */}
         <div
           id="confirmation-modal-desc"
-          className={`p-4 rounded-2xl text-xs space-y-2 border leading-relaxed ${
-            isDanger
+          className={`p-4 rounded-2xl text-xs space-y-2 border leading-relaxed ${isDanger
               ? 'bg-rose-50/70 dark:bg-rose-950/30 text-rose-900 dark:text-rose-200 border-rose-200/80 dark:border-rose-900/50'
               : 'bg-amber-50/70 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 border-amber-200/80 dark:border-amber-900/50'
-          }`}
+            }`}
         >
           <div className="flex items-start gap-2">
             <span className="material-symbols-outlined text-[18px] shrink-0 mt-0.5 text-rose-600 dark:text-rose-400">
@@ -164,11 +161,10 @@ export default function ConfirmationModal({
             type="button"
             onClick={onConfirm}
             disabled={isLoading}
-            className={`px-5 py-2.5 rounded-xl text-sm font-bold text-white shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 ${
-              isDanger
+            className={`px-5 py-2.5 rounded-xl text-sm font-bold text-white shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 ${isDanger
                 ? 'bg-rose-600 hover:bg-rose-700 active:bg-rose-800 shadow-rose-600/20'
                 : 'bg-amber-500 hover:bg-amber-600 active:bg-amber-700 shadow-amber-500/20'
-            }`}
+              }`}
           >
             {isLoading ? (
               <>

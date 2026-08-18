@@ -181,7 +181,7 @@ export default function PortalGateway() {
               </span>
             </div>
             <h1 className="font-headline-xl text-3xl font-bold text-on-background mb-2">
-              {settings?.platformName || 'Aura Laundry'} Portal
+              {settings?.platformName || 'Laundry'} Portal
             </h1>
 
             <p className="font-body-lg text-on-surface-variant max-w-lg mx-auto text-sm md:text-base">
@@ -196,8 +196,8 @@ export default function PortalGateway() {
                 type="button"
                 onClick={() => { setActivePortal('provider'); setErrorMsg(''); setSuccessMsg(''); }}
                 className={`flex-1 py-3 px-4 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${activePortal === 'provider'
-                    ? 'bg-surface-container-lowest text-primary shadow-sm'
-                    : 'text-on-surface-variant hover:text-on-background'
+                  ? 'bg-surface-container-lowest text-primary shadow-sm'
+                  : 'text-on-surface-variant hover:text-on-background'
                   }`}
               >
                 <span className="material-symbols-outlined text-lg">cleaning_services</span>
@@ -207,8 +207,8 @@ export default function PortalGateway() {
                 type="button"
                 onClick={() => { setActivePortal('admin'); setErrorMsg(''); setSuccessMsg(''); }}
                 className={`flex-1 py-3 px-4 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${activePortal === 'admin'
-                    ? 'bg-surface-container-lowest text-primary shadow-sm'
-                    : 'text-on-surface-variant hover:text-on-background'
+                  ? 'bg-surface-container-lowest text-primary shadow-sm'
+                  : 'text-on-surface-variant hover:text-on-background'
                   }`}
               >
                 <span className="material-symbols-outlined text-lg">admin_panel_settings</span>
@@ -249,8 +249,8 @@ export default function PortalGateway() {
                       type="button"
                       onClick={() => { setProviderMode('login'); setErrorMsg(''); }}
                       className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${providerMode === 'login'
-                          ? 'bg-surface-container-lowest text-primary shadow-xs'
-                          : 'text-on-surface-variant hover:text-on-background'
+                        ? 'bg-surface-container-lowest text-primary shadow-xs'
+                        : 'text-on-surface-variant hover:text-on-background'
                         }`}
                     >
                       Login
@@ -259,8 +259,8 @@ export default function PortalGateway() {
                       type="button"
                       onClick={() => { setProviderMode('register'); setErrorMsg(''); }}
                       className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${providerMode === 'register'
-                          ? 'bg-surface-container-lowest text-primary shadow-xs'
-                          : 'text-on-surface-variant hover:text-on-background'
+                        ? 'bg-surface-container-lowest text-primary shadow-xs'
+                        : 'text-on-surface-variant hover:text-on-background'
                         }`}
                     >
                       Register

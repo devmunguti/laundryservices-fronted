@@ -106,7 +106,7 @@ export default function AdminPortal() {
             ) : (
               <span className="material-symbols-outlined text-primary text-2xl">local_laundry_service</span>
             )}
-            <span className="font-headline-md text-primary tracking-tight">{settings?.platformName || 'Aura Laundry'}</span>
+            <span className="font-headline-md text-primary tracking-tight">{settings?.platformName || 'Laundry'}</span>
           </div>
 
           <button

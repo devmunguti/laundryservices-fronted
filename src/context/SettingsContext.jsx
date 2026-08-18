@@ -5,7 +5,7 @@ const SettingsContext = createContext(null);
 
 export const SettingsProvider = ({ children }) => {
   const [settings, setSettings] = useState({
-    platformName: 'Aura Laundry',
+    platformName: 'Laundry',
     supportEmail: 'support@auralaundry.co.ke',
     supportPhone: '+254 700 000 000',
     logoUrl: '',

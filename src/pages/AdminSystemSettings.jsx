@@ -55,6 +55,7 @@ export default function AdminSystemSettings() {
     zone: 'Main Campus',
     description: '',
     instructions: '',
+    coordinates: { lat: -1.286389, lng: 36.817223 },
     isActive: true
   });
   const [locationActionLoading, setLocationActionLoading] = useState(false);
@@ -421,7 +422,7 @@ export default function AdminSystemSettings() {
                     {logoUrl ? (
                       <img
                         className="w-24 h-24 object-contain mb-2 transition-transform"
-                        alt="Aura Laundry Logo"
+                        alt="Laundry Logo"
                         src={logoUrl}
                         onError={(e) => { e.target.style.display = 'none'; }}
                       />
@@ -480,17 +481,15 @@ export default function AdminSystemSettings() {
                   campusLocations.map((loc) => (
                     <div
                       key={loc._id || loc.name}
-                      className={`p-4 rounded-xl border transition-all flex flex-col justify-between gap-3 ${
-                        loc.isActive !== false
+                      className={`p-4 rounded-xl border transition-all flex flex-col justify-between gap-3 ${loc.isActive !== false
                           ? 'bg-surface-container-lowest border-surface-container/60 shadow-xs'
                           : 'bg-surface-container-low/60 border-dashed border-outline-variant/50 opacity-75'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2.5">
-                          <div className={`w-9 h-9 rounded-full flex items-center justify-center ${
-                            loc.isActive !== false ? 'bg-primary/10 text-primary' : 'bg-slate-200 text-slate-500'
-                          }`}>
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center ${loc.isActive !== false ? 'bg-primary/10 text-primary' : 'bg-slate-200 text-slate-500'
+                            }`}>
                             <span className="material-symbols-outlined text-[20px]">location_on</span>
                           </div>
                           <div>
@@ -501,9 +500,8 @@ export default function AdminSystemSettings() {
                           </div>
                         </div>
 
-                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                          loc.isActive !== false ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
-                        }`}>
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${loc.isActive !== false ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+                          }`}>
                           {loc.isActive !== false ? 'Active' : 'Inactive'}
                         </span>
                       </div>
@@ -523,11 +521,10 @@ export default function AdminSystemSettings() {
                         <button
                           type="button"
                           onClick={() => handleToggleLocationActive(loc._id, loc.isActive !== false)}
-                          className={`text-xs font-semibold px-3 py-1 rounded-lg transition-colors cursor-pointer ${
-                            loc.isActive !== false
+                          className={`text-xs font-semibold px-3 py-1 rounded-lg transition-colors cursor-pointer ${loc.isActive !== false
                               ? 'bg-amber-100 text-amber-900 hover:bg-amber-200'
                               : 'bg-emerald-100 text-emerald-900 hover:bg-emerald-200'
-                          }`}
+                            }`}
                         >
                           {loc.isActive !== false ? 'Deactivate' : 'Activate'}
                         </button>
@@ -552,7 +549,7 @@ export default function AdminSystemSettings() {
           {activeSubTab === 'financial' && (
             <div className="bg-surface-container-lowest rounded-xl shadow-xs p-margin-desktop border border-surface-container/40 animate-fade-in space-y-stack-gap-lg">
               <h2 className="font-headline-lg text-on-surface">Commission & Monetization</h2>
-              
+
               {/* Zero Commission Rule Highlight */}
               <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl flex items-start gap-3">
                 <span className="material-symbols-outlined text-emerald-600 mt-0.5 text-xl">account_tree</span>
@@ -893,6 +890,52 @@ export default function AdminSystemSettings() {
                   onChange={(e) => setLocationForm({ ...locationForm, instructions: e.target.value })}
                   className="w-full bg-surface-container-low border border-outline-variant rounded-lg px-3.5 py-2 text-sm text-on-surface focus:bg-white focus:border-primary outline-none resize-none"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-on-surface mb-1 block">
+                    Map Latitude (Optional)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="-1.28638"
+                    value={locationForm.coordinates?.lat ?? ''}
+                    onChange={(e) =>
+                      setLocationForm({
+                        ...locationForm,
+                        coordinates: {
+                          ...locationForm.coordinates,
+                          lat: parseFloat(e.target.value) || 0
+                        }
+                      })
+                    }
+                    className="w-full bg-surface-container-low border border-outline-variant rounded-lg px-3.5 py-2.5 text-sm text-on-surface focus:bg-white focus:border-primary outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-on-surface mb-1 block">
+                    Map Longitude (Optional)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="36.81722"
+                    value={locationForm.coordinates?.lng ?? ''}
+                    onChange={(e) =>
+                      setLocationForm({
+                        ...locationForm,
+                        coordinates: {
+                          ...locationForm.coordinates,
+                          lng: parseFloat(e.target.value) || 0
+                        }
+                      })
+                    }
+                    className="w-full bg-surface-container-low border border-outline-variant rounded-lg px-3.5 py-2.5 text-sm text-on-surface focus:bg-white focus:border-primary outline-none"
+                  />
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-container/40">

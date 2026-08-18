@@ -3,17 +3,18 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { orderApi } from '../api/orderApi';
 import { reviewApi } from '../api/reviewApi';
 import LiveNavigationMap from '../components/navigation/LiveNavigationMap';
+import { fetchRoadRoute, formatDistance, formatEta } from '../services/routingService';
 
 // ─── Order Status Timeline Definition ─────────────────────────────────────────
 // Matches the backend Order model enum exactly
 const ORDER_STAGES = [
-  { key: 'Pending',             label: 'Order Placed',         icon: 'check_circle',      description: 'Your order has been received and payment confirmed.' },
-  { key: 'Pickup_Scheduled',    label: 'Pickup Scheduled',     icon: 'event',             description: 'A pickup time has been scheduled.' },
-  { key: 'Picked_Up',          label: 'Picked Up',            icon: 'local_shipping',    description: 'Your laundry has been collected.' },
-  { key: 'In_Wash',            label: 'In Wash',              icon: 'local_laundry_service', description: 'Your laundry is being washed and cleaned.' },
-  { key: 'Ready_For_Delivery', label: 'Ready for Delivery',   icon: 'inventory_2',       description: 'Your clean laundry is ready to be delivered.' },
-  { key: 'Out_For_Delivery',   label: 'Out for Delivery',     icon: 'delivery_dining',   description: 'Your laundry is on its way to you.' },
-  { key: 'Delivered',          label: 'Delivered',            icon: 'done_all',          description: 'Your laundry has been delivered successfully!' },
+  { key: 'Pending', label: 'Order Placed', icon: 'check_circle', description: 'Your order has been received and payment confirmed.' },
+  { key: 'Pickup_Scheduled', label: 'Pickup Scheduled', icon: 'event', description: 'A pickup time has been scheduled.' },
+  { key: 'Picked_Up', label: 'Picked Up', icon: 'local_shipping', description: 'Your laundry has been collected.' },
+  { key: 'In_Wash', label: 'In Wash', icon: 'local_laundry_service', description: 'Your laundry is being washed and cleaned.' },
+  { key: 'Ready_For_Delivery', label: 'Ready for Delivery', icon: 'inventory_2', description: 'Your clean laundry is ready to be delivered.' },
+  { key: 'Out_For_Delivery', label: 'Out for Delivery', icon: 'delivery_dining', description: 'Your laundry is on its way to you.' },
+  { key: 'Delivered', label: 'Delivered', icon: 'done_all', description: 'Your laundry has been delivered successfully!' },
 ];
 
 const CANCELLED_STAGE = { key: 'Cancelled', label: 'Cancelled', icon: 'cancel', description: 'This order has been cancelled.' };
@@ -145,11 +146,10 @@ function OrderStatusTimeline({ currentStatus, paymentStatus }) {
           <div key={stage.key} className="flex gap-4 mb-0">
             {/* Timeline spine */}
             <div className="flex flex-col items-center">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-500 ${
-                isCompleted ? 'bg-emerald-500 shadow-md shadow-emerald-200' :
-                isActive    ? 'bg-indigo-600 shadow-lg shadow-indigo-200 ring-4 ring-indigo-100' :
-                              'bg-gray-100 border-2 border-gray-200'
-              }`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-500 ${isCompleted ? 'bg-emerald-500 shadow-md shadow-emerald-200' :
+                  isActive ? 'bg-indigo-600 shadow-lg shadow-indigo-200 ring-4 ring-indigo-100' :
+                    'bg-gray-100 border-2 border-gray-200'
+                }`}>
                 {isCompleted ? (
                   <span className="material-symbols-outlined text-white text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
                 ) : (
@@ -161,17 +161,15 @@ function OrderStatusTimeline({ currentStatus, paymentStatus }) {
               </div>
               {/* Connector line */}
               {idx < ORDER_STAGES.length - 1 && (
-                <div className={`w-0.5 h-10 mt-1 transition-all duration-700 ${
-                  isCompleted ? 'bg-emerald-400' : 'bg-gray-200'
-                }`} />
+                <div className={`w-0.5 h-10 mt-1 transition-all duration-700 ${isCompleted ? 'bg-emerald-400' : 'bg-gray-200'
+                  }`} />
               )}
             </div>
 
             {/* Stage label */}
             <div className={`pb-8 ${idx === ORDER_STAGES.length - 1 ? 'pb-0' : ''}`}>
-              <p className={`font-semibold text-sm leading-none mt-2.5 ${
-                isActive ? 'text-indigo-700' : isCompleted ? 'text-emerald-700' : 'text-gray-400'
-              }`}>
+              <p className={`font-semibold text-sm leading-none mt-2.5 ${isActive ? 'text-indigo-700' : isCompleted ? 'text-emerald-700' : 'text-gray-400'
+                }`}>
                 {stage.key === 'Pending' && isPaid ? 'Order Placed & Paid' : stage.label}
                 {isActive && (
                   <span className="ml-2 inline-flex items-center gap-1 text-xs font-medium text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full animate-pulse">
@@ -243,7 +241,7 @@ function ClientRatingCard({ orderRef, providerName, customerName: defaultName, o
   }, [checkReview]);
 
   const toggleTag = (tag) => {
-    setSelectedTags(prev => 
+    setSelectedTags(prev =>
       prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
     );
   };
@@ -313,9 +311,8 @@ function ClientRatingCard({ orderRef, providerName, customerName: defaultName, o
           {[1, 2, 3, 4, 5].map((star) => (
             <span
               key={star}
-              className={`material-symbols-outlined text-2xl ${
-                star <= existingReview.rating ? 'text-amber-400' : 'text-gray-200'
-              }`}
+              className={`material-symbols-outlined text-2xl ${star <= existingReview.rating ? 'text-amber-400' : 'text-gray-200'
+                }`}
               style={{ fontVariationSettings: "'FILL' 1" }}
             >
               star
@@ -402,9 +399,8 @@ function ClientRatingCard({ orderRef, providerName, customerName: defaultName, o
                     className="p-1 -m-1 text-3xl focus:outline-none transition-transform hover:scale-110 cursor-pointer"
                   >
                     <span
-                      className={`material-symbols-outlined text-3xl transition-colors ${
-                        active ? 'text-amber-400' : 'text-gray-300'
-                      }`}
+                      className={`material-symbols-outlined text-3xl transition-colors ${active ? 'text-amber-400' : 'text-gray-300'
+                        }`}
                       style={{ fontVariationSettings: "'FILL' 1" }}
                     >
                       star
@@ -432,11 +428,10 @@ function ClientRatingCard({ orderRef, providerName, customerName: defaultName, o
                   key={tag}
                   type="button"
                   onClick={() => toggleTag(tag)}
-                  className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
-                    selected
+                  className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${selected
                       ? 'bg-indigo-600 text-white shadow-xs'
                       : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
-                  }`}
+                    }`}
                 >
                   {tag}
                 </button>
@@ -504,6 +499,9 @@ export default function TrackOrderPage() {
   const [locationError, setLocationError] = useState('');
   const [editRoom, setEditRoom] = useState('');
   const [editInstructions, setEditInstructions] = useState('');
+  const [liveRouteCoords, setLiveRouteCoords] = useState([]);
+  const [liveDistanceKm, setLiveDistanceKm] = useState(null);
+  const [liveEtaMinutes, setLiveEtaMinutes] = useState(null);
 
   const intervalRef = useRef(null);
   const isMountedRef = useRef(true);
@@ -621,6 +619,42 @@ export default function TrackOrderPage() {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [tracking?.status, loading, error, fetchTracking]);
+
+  // Calculate live road route when provider coordinates update
+  useEffect(() => {
+    const provLat = tracking?.providerLiveLocation?.coordinates?.lat;
+    const provLng = tracking?.providerLiveLocation?.coordinates?.lng;
+    const destLat = tracking?.pickupAddress?.coordinates?.lat;
+    const destLng = tracking?.pickupAddress?.coordinates?.lng;
+
+    if (!provLat || !provLng || !destLat || !destLng) {
+      setLiveRouteCoords([]);
+      setLiveDistanceKm(null);
+      setLiveEtaMinutes(null);
+      return;
+    }
+
+    let isSubscribed = true;
+    const computeRoute = async () => {
+      const res = await fetchRoadRoute([provLat, provLng], [destLat, destLng]);
+      if (isSubscribed && res) {
+        setLiveRouteCoords(res.coordinates || []);
+        setLiveDistanceKm(res.distanceKm);
+        setLiveEtaMinutes(res.durationMinutes);
+      }
+    };
+
+    computeRoute();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [
+    tracking?.providerLiveLocation?.coordinates?.lat,
+    tracking?.providerLiveLocation?.coordinates?.lng,
+    tracking?.pickupAddress?.coordinates?.lat,
+    tracking?.pickupAddress?.coordinates?.lng
+  ]);
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '—';
@@ -748,7 +782,7 @@ export default function TrackOrderPage() {
             </div>
             <div>
               <p className="text-white font-bold text-base">Order Delivered!</p>
-              <p className="text-indigo-200 text-sm mt-0.5">Thank you for using Aura Laundry.</p>
+              <p className="text-indigo-200 text-sm mt-0.5">Thank you for using Laundry.</p>
             </div>
           </div>
         )}
@@ -890,11 +924,12 @@ export default function TrackOrderPage() {
                     driverPosition={
                       tracking.providerLiveLocation?.coordinates?.lat
                         ? [
-                            tracking.providerLiveLocation.coordinates.lat,
-                            tracking.providerLiveLocation.coordinates.lng
-                          ]
+                          tracking.providerLiveLocation.coordinates.lat,
+                          tracking.providerLiveLocation.coordinates.lng
+                        ]
                         : null
                     }
+                    routeCoordinates={liveRouteCoords}
                     heading={tracking.providerLiveLocation?.coordinates?.heading || 0}
                     speed={tracking.providerLiveLocation?.coordinates?.speed || 0}
                     autoFollow={false}
@@ -907,9 +942,11 @@ export default function TrackOrderPage() {
                     className="w-full h-full"
                   />
                   {tracking.providerLiveLocation?.isNavigating && (
-                    <div className="absolute top-3 left-3 z-10 bg-blue-600 text-white text-[11px] font-bold px-3 py-1 rounded-full shadow-lg flex items-center gap-1.5 animate-pulse">
+                    <div className="absolute top-3 left-3 z-10 bg-blue-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-lg flex items-center gap-2 animate-pulse border border-white/20">
                       <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
-                      <span>Cleaner En Route to You</span>
+                      <span>
+                        Cleaner En Route {liveEtaMinutes ? `• ~${formatEta(liveEtaMinutes)} away (${formatDistance(liveDistanceKm)})` : ''}
+                      </span>
                     </div>
                   )}
                 </div>
