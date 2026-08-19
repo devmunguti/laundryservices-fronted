@@ -11,6 +11,20 @@ const api = axios.create({
   },
 });
 
+// Request interceptor: Attach JWT Bearer token if present
+api.interceptors.request.use(
+  (config) => {
+    try {
+      const token = localStorage.getItem('aura_auth_token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (e) {}
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
