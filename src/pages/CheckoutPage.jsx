@@ -558,7 +558,6 @@ export default function CheckoutPage() {
                 <form onSubmit={handleStkPush} className="flex flex-col gap-3">
                   <h3 className="font-label-md text-label-md text-primary uppercase tracking-wider">
                     Option 1: M-Pesa Express STK Push (Recommended)
-                    {JSON.stringify(orderApiResponse)}
                   </h3>
                   <p className="font-body-sm text-on-surface-variant">
                     Receive an instant payment prompt directly on your phone for Till #{orderData.tillNumber || '8995354'}. Enter your M-Pesa PIN to authorize.
