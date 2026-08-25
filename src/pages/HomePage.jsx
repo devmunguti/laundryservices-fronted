@@ -601,7 +601,7 @@ export default function HomePage() {
 
           {/* Footer */}
           <footer className="w-full py-6 mt-16 text-center text-on-surface-variant font-body-sm text-xs border-t border-outline-variant/20">
-            <p>© 2026 {settings?.platformName || 'Cleanly'}. All rights reserved.</p>
+            <p>© 2026 {settings?.platformName || 'Oduori Laundry'}. All rights reserved.</p>
             <p className="text-xs text-outline mt-1">Support: {settings?.supportEmail || 'support@auralaundry.co.ke'} | {settings?.supportPhone || '+254 700 000 000'}</p>
           </footer>
         </div>

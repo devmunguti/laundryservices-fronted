@@ -79,16 +79,15 @@ export default function Navbar() {
     <>
       <header className="navbar-root">
         <div className="navbar-container">
-          {/* Brand Logo */}
-          <Link to="/" className="navbar-brand" aria-label={`${settings?.platformName || 'Laundry'} Home`}>
+          {/* Brand Logo & Home Link */}
+          <Link to="/" className="navbar-brand" aria-label={`${settings?.platformName || 'Oduori Laundry'} Home`}>
             {settings?.logoUrl ? (
               <img
                 src={settings.logoUrl}
                 alt={settings?.platformName || 'Logo'}
                 className="h-8 w-auto object-contain"
                 onError={(e) => {
-                  e.target.onerror = null;
-                  e.target.style.display = 'none';
+                  e.currentTarget.style.display = 'none';
                 }}
               />
             ) : (
@@ -96,16 +95,17 @@ export default function Navbar() {
                 <span className="material-symbols-outlined text-[20px]">local_laundry_service</span>
               </span>
             )}
-            <span className="brand-name">{settings?.platformName || 'Cleanly'}</span>
+            <span className="brand-name">{settings?.platformName || 'Oduori Laundry'}</span>
           </Link>
 
           {/* Desktop Navigation Links */}
           <nav className="navbar-desktop-nav" aria-label="Main Navigation">
             <Link
               to="/"
-              className={`nav-link ${location.pathname === '/' ? 'active' : ''}`}
+              className={`nav-link flex items-center gap-1.5 ${location.pathname === '/' ? 'active' : ''}`}
             >
-              Marketplace
+              <span className="material-symbols-outlined text-[18px]">home</span>
+              <span>Home</span>
             </Link>
             <Link
               to="/reviews"
@@ -195,7 +195,7 @@ export default function Navbar() {
                   <span className="material-symbols-outlined text-[20px]">local_laundry_service</span>
                 </span>
                 <span className="font-headline-md text-base font-bold text-on-surface">
-                  {settings?.platformName || 'Cleanly'}
+                  {settings?.platformName || 'Oduori Laundry'}
                 </span>
               </div>
               <button
@@ -215,8 +215,8 @@ export default function Navbar() {
                 onClick={() => setIsMobileMenuOpen(false)}
                 className={`mobile-nav-link ${location.pathname === '/' ? 'active' : ''}`}
               >
-                <span className="material-symbols-outlined">explore</span>
-                <span>Marketplace</span>
+                <span className="material-symbols-outlined">home</span>
+                <span>Home</span>
               </Link>
 
               <Link

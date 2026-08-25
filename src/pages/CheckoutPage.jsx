@@ -426,8 +426,8 @@ export default function CheckoutPage() {
     <div className="bg-background font-body-md text-on-surface min-h-screen">
       {/* Enhanced Checkout Navigation Header */}
       <header className="fixed top-0 left-0 right-0 h-20 bg-surface/80 backdrop-blur-xl z-40 flex items-center justify-between px-4 sm:px-6 lg:px-12 shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
-        {/* Left: Dynamic Back Button & Brand Logo */}
-        <div className="flex items-center gap-3 sm:gap-6">
+        {/* Left: Dynamic Back Button & Home Navigation */}
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             type="button"
             onClick={() => {
@@ -449,29 +449,24 @@ export default function CheckoutPage() {
             <span className="sm:hidden">Back</span>
           </button>
 
-          {/* Cleanly Logo Home Button */}
+          {/* Home Button */}
           <button
             type="button"
             onClick={() => navigate('/')}
-            className="flex items-center gap-2.5 px-3 py-1.5 rounded-2xl hover:bg-surface-container transition-all group cursor-pointer border border-transparent hover:border-outline-variant/30"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-surface-container hover:bg-primary/10 text-on-surface hover:text-primary transition-all group cursor-pointer border border-outline-variant/30 hover:border-primary/40 font-semibold text-xs shrink-0"
             title="Go to Home"
-            aria-label="Cleanly Home"
+            aria-label="Home"
           >
-            <img
-              alt="Cleanly Logo"
-              className="h-8 w-auto object-contain group-hover:scale-105 transition-transform"
-              src="https://lh3.googleusercontent.com/aida/AP1WRLta25wmxF0oJh9s5exB3Ml7fMmY_esGvwYxcKOGZXWLBepx1CHhANhjBXqPbbNnTNm7MIbDRR3Ab1Vj9ov3fBDnLO5WMZag_dDQfQOL4Trb-Yxm9ddXDK3GQcZCyhVXI96L6P4dWgbcfnOjDNoJfkSUIj_KSAzA2jUTk3ZD3csi9B1PcK3Z8tfcLndPQbkxp7gOwemuQOl7rko664DBJXqzta58JFFYVZgGIT-K6ed6EbOP4vs3Fde4xos"
-            />
-            <div className="flex flex-col items-start text-left">
-              <span className="font-headline-md text-headline-md text-primary tracking-tight font-semibold leading-tight group-hover:text-primary/90">
-                {settings?.platformName || 'Cleanly'}
-              </span>
-              <span className="text-[10px] text-on-surface-variant font-medium flex items-center gap-0.5 leading-none">
-                <span className="material-symbols-outlined text-[12px] text-primary">home</span>
-                <span>Home</span>
-              </span>
-            </div>
+            <span className="material-symbols-outlined text-[18px] text-primary group-hover:scale-110 transition-transform">home</span>
+            <span className="font-bold">Home</span>
           </button>
+
+          {/* Platform / Brand Name */}
+          <div className="hidden md:flex flex-col ml-1">
+            <span className="font-headline-md text-headline-md text-primary tracking-tight font-bold leading-tight">
+              {settings?.platformName || 'Oduori Laundry'}
+            </span>
+          </div>
         </div>
 
         {/* Center: Cleaner Storefront & Security Badge */}
