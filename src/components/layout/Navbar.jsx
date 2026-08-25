@@ -4,7 +4,12 @@ import { useSettings } from '../../context/SettingsContext';
 import { useAuth } from '../../hooks/useAuth';
 import { orderApi } from '../../api/orderApi';
 import toast from 'react-hot-toast';
+import NotificationBell from '../ui/NotificationBell';
 import './Navbar.css';
+
+
+
+
 
 export default function Navbar() {
   const { settings } = useSettings();
@@ -137,6 +142,9 @@ export default function Navbar() {
               <span className="hidden sm:inline">Track Order</span>
             </button>
 
+            {/* In-App Notification Bell */}
+            {isAuthenticated && <NotificationBell className="mr-1" />}
+
             {/* User Session or Portal Login */}
             {isAuthenticated && user ? (
               user.role === 'admin' ? (
@@ -164,6 +172,7 @@ export default function Navbar() {
                 <span className="hidden sm:inline">Login</span>
               </Link>
             )}
+
 
             {/* Mobile Hamburger Menu Toggle */}
             <button

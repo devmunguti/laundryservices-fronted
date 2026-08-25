@@ -14,6 +14,8 @@ import AdminPaymentRecords from './AdminPaymentRecords';
 import AdminUserLogs from './AdminUserLogs';
 import AdminSystemSettings from './AdminSystemSettings';
 import AdminPromotionsManagement from './AdminPromotionsManagement';
+import NotificationBell from '../components/ui/NotificationBell';
+
 
 export default function AdminPortal() {
   const { settings } = useSettings();
@@ -186,16 +188,9 @@ export default function AdminPortal() {
           </div>
 
           <div className="flex items-center gap-stack-gap-md">
-            <button
-              onClick={() => toast('No unread system alerts')}
-              className="relative p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors cursor-pointer"
-              title="System Alerts"
-              aria-label="System Alerts"
-            >
-              <span className="material-symbols-outlined">notifications</span>
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full ring-2 ring-surface-container-lowest" />
-            </button>
+            <NotificationBell />
             <div className="h-8 w-[1px] bg-surface-container mx-2" />
+
             <div
               onClick={() => handleTabChange('system-settings')}
               className="flex items-center gap-3 pl-2 pr-1 py-1 rounded-full hover:bg-surface-container cursor-pointer transition-colors"

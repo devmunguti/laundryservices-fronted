@@ -15,6 +15,8 @@ import ProviderEarnings from './ProviderEarnings';
 import PaymentChannels from './PaymentChannels';
 import ProviderProfile from './ProviderProfile';
 import ProviderSettings from './ProviderSettings';
+import NotificationBell from '../components/ui/NotificationBell';
+
 
 export default function ProviderPortal() {
   const { settings } = useSettings();
@@ -196,17 +198,10 @@ export default function ProviderPortal() {
           </div>
 
           <div className="flex items-center gap-4 sm:gap-6">
-            <button
-              onClick={() => toast('No unread notifications')}
-              className="relative p-2 text-[#434656] hover:bg-[#e8e8ea] rounded-full transition-colors cursor-pointer"
-              title="Notifications"
-              aria-label="Notifications"
-            >
-              <span className="material-symbols-outlined text-[24px]">notifications</span>
-              <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-[#ba1a1a] rounded-full ring-2 ring-white"></span>
-            </button>
+            <NotificationBell />
             <div
               onClick={() => handleTabChange('profile')}
+
               className="flex items-center gap-3 pl-4 border-l border-[#c3c5d9]/40 cursor-pointer hover:opacity-80 transition-opacity"
             >
               <div className="text-right hidden sm:block">
