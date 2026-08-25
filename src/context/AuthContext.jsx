@@ -23,20 +23,18 @@ export const AuthProvider = ({ children }) => {
         setUser(res.user);
         try {
           localStorage.setItem('aura_auth_user', JSON.stringify(res.user));
-        } catch (e) {}
+        } catch (e) { }
       } else {
         setUser(null);
         try {
           localStorage.removeItem('aura_auth_user');
-          localStorage.removeItem('aura_auth_token');
-        } catch (e) {}
+        } catch (e) { }
       }
     } catch (error) {
       setUser(null);
       try {
         localStorage.removeItem('aura_auth_user');
-        localStorage.removeItem('aura_auth_token');
-      } catch (e) {}
+      } catch (e) { }
     } finally {
       setLoading(false);
     }
@@ -52,10 +50,7 @@ export const AuthProvider = ({ children }) => {
       setUser(res.user);
       try {
         localStorage.setItem('aura_auth_user', JSON.stringify(res.user));
-        if (res.token) {
-          localStorage.setItem('aura_auth_token', res.token);
-        }
-      } catch (e) {}
+      } catch (e) { }
     }
     return res;
   };
@@ -66,10 +61,7 @@ export const AuthProvider = ({ children }) => {
       setUser(res.user);
       try {
         localStorage.setItem('aura_auth_user', JSON.stringify(res.user));
-        if (res.token) {
-          localStorage.setItem('aura_auth_token', res.token);
-        }
-      } catch (e) {}
+      } catch (e) { }
     }
     return res;
   };
@@ -83,8 +75,7 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
       try {
         localStorage.removeItem('aura_auth_user');
-        localStorage.removeItem('aura_auth_token');
-      } catch (e) {}
+      } catch (e) { }
     }
   };
 
@@ -98,10 +89,7 @@ export const AuthProvider = ({ children }) => {
       setUser(res.user);
       try {
         localStorage.setItem('aura_auth_user', JSON.stringify(res.user));
-        if (res.token) {
-          localStorage.setItem('aura_auth_token', res.token);
-        }
-      } catch (e) {}
+      } catch (e) { }
     }
     return res;
   };

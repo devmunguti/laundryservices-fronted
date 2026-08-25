@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { reviewApi } from '../api/reviewApi';
 import Navbar from '../components/layout/Navbar';
+import { SkeletonCard } from '../components/ui/Skeleton';
+import EmptyState from '../components/ui/EmptyState';
 
 export default function ReviewsPage() {
   const navigate = useNavigate();
@@ -227,11 +229,10 @@ export default function ReviewsPage() {
                 <button
                   key={opt.id}
                   onClick={() => setSelectedPriceFilter(opt.id)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
-                    selectedPriceFilter === opt.id
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${selectedPriceFilter === opt.id
                       ? 'bg-emerald-600 text-white shadow-xs'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-                  }`}
+                    }`}
                 >
                   {opt.id === 'budget' && <span className="material-symbols-outlined text-[14px]">savings</span>}
                   {opt.label}
@@ -249,11 +250,10 @@ export default function ReviewsPage() {
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                    selectedCategory === cat
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${selectedCategory === cat
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-                  }`}
+                    }`}
                 >
                   {cat}
                 </button>
@@ -264,9 +264,10 @@ export default function ReviewsPage() {
 
         {/* Directory & Rankings Stream */}
         {loading ? (
-          <div className="py-20 text-center text-blue-600 flex flex-col items-center justify-center gap-3">
-            <span className="material-symbols-outlined animate-spin text-4xl">sync</span>
-            <p className="text-sm font-semibold text-slate-600">Loading verified cleaner reviews and service rankings...</p>
+          <div className="space-y-6">
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
           </div>
         ) : error ? (
           <div className="p-6 bg-rose-50 border border-rose-200 rounded-3xl text-rose-700 text-center space-y-2">
@@ -274,11 +275,14 @@ export default function ReviewsPage() {
             <p className="text-sm font-semibold">{error}</p>
           </div>
         ) : providers.length === 0 ? (
-          <div className="bg-white rounded-3xl p-12 text-center text-slate-400 space-y-3 border border-[#c3c5d9]/30">
-            <span className="material-symbols-outlined text-5xl text-slate-300">search_off</span>
-            <h3 className="text-lg font-bold text-slate-700">No cleaners found matching your criteria</h3>
-            <p className="text-xs text-slate-500">Try adjusting your search terms or clearing your category filters.</p>
-          </div>
+          <EmptyState
+            icon="rate_review"
+            title="No Verified Cleaners Found"
+            description="No cleaners match your current category, price, or minimum rating filter."
+            actionLabel="Reset All Filters"
+            actionIcon="refresh"
+            onAction={handleResetFilters}
+          />
         ) : (
           <div className="space-y-8">
             {providers.map((provider) => {
@@ -287,17 +291,16 @@ export default function ReviewsPage() {
                 provider.rank === 1
                   ? 'bg-amber-100 text-amber-900 border-amber-300'
                   : provider.rank === 2
-                  ? 'bg-slate-200 text-slate-800 border-slate-300'
-                  : provider.rank === 3
-                  ? 'bg-amber-50 text-amber-800 border-amber-200'
-                  : 'bg-blue-50 text-blue-700 border-blue-200';
+                    ? 'bg-slate-200 text-slate-800 border-slate-300'
+                    : provider.rank === 3
+                      ? 'bg-amber-50 text-amber-800 border-amber-200'
+                      : 'bg-blue-50 text-blue-700 border-blue-200';
 
               return (
                 <div
                   key={provider.id}
-                  className={`bg-white rounded-3xl border transition-all duration-300 shadow-xs hover:shadow-md overflow-hidden ${
-                    provider.isPromoted ? 'border-indigo-300 ring-2 ring-indigo-500/10' : 'border-[#c3c5d9]/30'
-                  }`}
+                  className={`bg-white rounded-3xl border transition-all duration-300 shadow-xs hover:shadow-md overflow-hidden ${provider.isPromoted ? 'border-indigo-300 ring-2 ring-indigo-500/10' : 'border-[#c3c5d9]/30'
+                    }`}
                 >
                   {/* Card Header & Cleaner Summary */}
                   <div className="p-6 md:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-6 border-b border-slate-100">

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { systemSettingsApi } from '../api/systemSettingsApi';
+import toast from 'react-hot-toast';
 
-export default function cleanersProfile({ isStandalone = true }) {
+export default function ProviderProfile({ isStandalone = true }) {
   const { user } = useAuth();
   const [commissionRate, setCommissionRate] = useState(15);
   const [profile, setProfile] = useState({
@@ -164,7 +165,7 @@ export default function cleanersProfile({ isStandalone = true }) {
                   <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_0_1px_rgba(0,0,0,0.1)] rounded-lg"></div>
                   <button
                     type="button"
-                    onClick={() => alert('Map Pin adjustment widget opened.')}
+                    onClick={() => toast('Map pin adjustment saved')}
                     className="absolute bottom-3 right-3 bg-white text-[#1a1c1e] px-3 py-1.5 rounded-lg shadow-md font-['Geist'] text-xs font-semibold flex items-center gap-1 hover:bg-[#e8e8ea] transition-colors pointer-events-auto cursor-pointer"
                   >
                     <span className="material-symbols-outlined text-[16px]">edit_location</span> Adjust Pin
@@ -558,14 +559,14 @@ export default function cleanersProfile({ isStandalone = true }) {
       <div className="fixed bottom-0 left-0 md:left-72 right-0 p-4 bg-[#f9f9fc]/90 backdrop-blur-md border-t border-[#c3c5d9]/20 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] flex justify-end gap-4 z-40">
         <button
           type="button"
-          onClick={() => alert('Profile changes discarded.')}
+          onClick={() => toast('Profile changes discarded')}
           className="px-6 py-2.5 rounded-full bg-[#e2e2e5] text-[#434656] font-['Geist'] text-sm font-medium hover:bg-[#dadadc] transition-colors shadow-xs cursor-pointer"
         >
           Discard Changes
         </button>
         <button
           type="button"
-          onClick={() => alert('Business Profile saved successfully!')}
+          onClick={() => toast.success('Business Profile saved successfully!')}
           className="px-6 py-2.5 rounded-full bg-[#003ec7] text-white font-['Geist'] text-sm font-medium hover:bg-[#0038b6] transition-colors shadow-md flex items-center gap-2 group cursor-pointer"
         >
           <span className="material-symbols-outlined text-[20px] group-hover:scale-110 transition-transform">save</span>

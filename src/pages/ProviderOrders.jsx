@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { orderApi } from '../api/orderApi';
+import toast from 'react-hot-toast';
 
-export default function cleanersOrders({ isStandalone = true }) {
+export default function ProviderOrders({ isStandalone = true }) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('orders');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -103,12 +104,20 @@ export default function cleanersOrders({ isStandalone = true }) {
       setUpdatingOrderId(rawId);
       const res = await orderApi.updateOrderStatus(rawId, newMongoStatus);
       if (res.success) {
+        toast.success(`Order status updated to ${newMongoStatus.replace(/_/g, ' ')}`);
         await fetchOrdersAndMetrics();
+        if (selectedOrder && selectedOrder.rawId === rawId) {
+          setSelectedOrder(prev => ({
+            ...prev,
+            rawStatus: newMongoStatus,
+            statusLabel: newMongoStatus.replace(/_/g, ' ')
+          }));
+        }
       } else {
-        alert(res.message || 'Failed to update order status.');
+        toast.error(res.message || 'Failed to update order status.');
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Error updating order status.');
+      toast.error(err.response?.data?.message || 'Error updating order status.');
     } finally {
       setUpdatingOrderId(null);
     }
@@ -520,7 +529,7 @@ export default function cleanersOrders({ isStandalone = true }) {
                     <button
                       onClick={() => {
                         navigator.clipboard?.writeText(selectedOrder.transactionId);
-                        alert('M-Pesa Code Copied!');
+                        toast.success('M-Pesa transaction code copied!');
                       }}
                       className="text-xs bg-[#003ec7]/10 hover:bg-[#003ec7]/20 text-[#003ec7] font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
                     >

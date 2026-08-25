@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { orderApi } from '../api/orderApi';
 import LiveNavigationMap from '../components/navigation/LiveNavigationMap';
 import {
@@ -425,12 +426,13 @@ export default function ProviderNavigationPage() {
       setStatusUpdating(true);
       const res = await orderApi.updateOrderStatus(order._id || order.id, newStatus);
       if (res.success) {
+        toast.success(msg || `Status updated to ${newStatus.replace(/_/g, ' ')}`);
         setStatusSuccessMsg(msg || `Status updated to ${newStatus.replace(/_/g, ' ')}`);
         await fetchOrder();
         setTimeout(() => setStatusSuccessMsg(''), 3500);
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to update order status.');
+      toast.error(err.response?.data?.message || 'Failed to update order status.');
     } finally {
       setStatusUpdating(false);
     }

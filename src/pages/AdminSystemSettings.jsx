@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { systemSettingsApi } from '../api/systemSettingsApi';
 import { useSettings } from '../context/SettingsContext';
+import toast from 'react-hot-toast';
+import ConfirmationModal from '../components/ui/ConfirmationModal';
 
 export default function AdminSystemSettings() {
   const { refreshSettings } = useSettings();
@@ -11,6 +13,8 @@ export default function AdminSystemSettings() {
   const [errorMessage, setErrorMessage] = useState(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [lastUpdatedTime, setLastUpdatedTime] = useState(null);
+  const [deleteLocationTarget, setDeleteLocationTarget] = useState(null);
+  const [isDeletingLocation, setIsDeletingLocation] = useState(false);
 
   // Raw fetched data backup for "Discard Changes"
   const [rawBackupData, setRawBackupData] = useState(null);
@@ -221,14 +225,14 @@ export default function AdminSystemSettings() {
         }
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to reveal sensitive key. Admin authorization required.');
+      toast.error(err.response?.data?.message || 'Failed to reveal sensitive key. Admin authorization required.');
     }
   };
 
   const handleCopy = (text) => {
     if (!text) return;
     navigator.clipboard.writeText(text);
-    alert('Copied to clipboard!');
+    toast.success('Copied to clipboard!');
   };
 
   const handleAddLocationSubmit = async (e) => {
@@ -249,10 +253,10 @@ export default function AdminSystemSettings() {
           isActive: true
         });
         refreshSettings();
-        alert('Campus Pickup Hub added successfully!');
+        toast.success('Campus Pickup Hub added successfully!');
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to add campus location.');
+      toast.error(err.response?.data?.message || 'Failed to add campus location.');
     } finally {
       setLocationActionLoading(false);
     }
@@ -264,23 +268,29 @@ export default function AdminSystemSettings() {
       if (res.success && res.data) {
         setCampusLocations(res.data);
         refreshSettings();
+        toast.success(`Campus station ${!currentActive ? 'activated' : 'disabled'}`);
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to update campus location status.');
+      toast.error(err.response?.data?.message || 'Failed to update campus location status.');
     }
   };
 
-  const handleDeleteLocation = async (locId) => {
-    if (!window.confirm('Are you sure you want to delete this campus pickup station?')) return;
+  const handleConfirmDeleteLocation = async () => {
+    if (!deleteLocationTarget) return;
 
     try {
-      const res = await systemSettingsApi.deleteCampusLocation(locId);
+      setIsDeletingLocation(true);
+      const res = await systemSettingsApi.deleteCampusLocation(deleteLocationTarget._id || deleteLocationTarget.id);
       if (res.success && res.data) {
         setCampusLocations(res.data);
+        setDeleteLocationTarget(null);
         refreshSettings();
+        toast.success('Campus pickup station deleted successfully.');
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to delete campus location.');
+      toast.error(err.response?.data?.message || 'Failed to delete campus location.');
+    } finally {
+      setIsDeletingLocation(false);
     }
   };
 
@@ -531,7 +541,7 @@ export default function AdminSystemSettings() {
 
                         <button
                           type="button"
-                          onClick={() => handleDeleteLocation(loc._id)}
+                          onClick={() => setDeleteLocationTarget(loc)}
                           className="text-xs text-error hover:bg-error-container/30 px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
                         >
                           <span className="material-symbols-outlined text-[14px]">delete</span>
@@ -968,6 +978,19 @@ export default function AdminSystemSettings() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal for Campus Location Deletion */}
+      <ConfirmationModal
+        isOpen={Boolean(deleteLocationTarget)}
+        onClose={() => setDeleteLocationTarget(null)}
+        onConfirm={handleConfirmDeleteLocation}
+        title="Delete Campus Pickup Hub"
+        itemName={deleteLocationTarget?.name}
+        warningMessage="Are you sure you want to permanently delete this campus pickup station? Students will no longer see it as a pickup option during checkout."
+        confirmText="Delete Hub"
+        type="danger"
+        isLoading={isDeletingLocation}
+      />
     </div>
   );
 }

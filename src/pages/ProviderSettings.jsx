@@ -2,13 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import api from '../api/axios';
+import toast from 'react-hot-toast';
+import ConfirmationModal from '../components/ui/ConfirmationModal';
 
-export default function cleanersSettings({ isStandalone = true }) {
+export default function ProviderSettings({ isStandalone = true }) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('account');
   const [savedNotification, setSavedNotification] = useState('');
   const [deactivating, setDeactivating] = useState(false);
+  const [isDeactivateModalOpen, setIsDeactivateModalOpen] = useState(false);
 
   // Account State
   const [account, setAccount] = useState({
@@ -49,26 +52,23 @@ export default function cleanersSettings({ isStandalone = true }) {
   });
 
   const handleSave = () => {
+    toast.success('Account settings saved successfully!');
     setSavedNotification('Settings saved successfully!');
     setTimeout(() => setSavedNotification(''), 3000);
   };
 
-  const handleDeactivateAccount = async () => {
-    const confirm = window.confirm(
-      '⚠️ Are you sure you want to deactivate your cleaner account?\n\nAll your services will immediately be hidden from the customer homepage and your listing will be paused until an administrator re-activates it.'
-    );
-    if (!confirm) return;
-
+  const handleConfirmDeactivate = async () => {
     try {
       setDeactivating(true);
       const res = await api.post('/auth/deactivate-account');
       if (res.data?.success) {
-        alert(res.data.message || 'Account deactivated successfully.');
+        toast.success(res.data.message || 'Account deactivated successfully.');
+        setIsDeactivateModalOpen(false);
         await logout();
         navigate('/login');
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to deactivate account.');
+      toast.error(err.response?.data?.message || 'Failed to deactivate account.');
     } finally {
       setDeactivating(false);
     }
@@ -230,7 +230,7 @@ export default function cleanersSettings({ isStandalone = true }) {
                 <button
                   type="button"
                   disabled={deactivating}
-                  onClick={handleDeactivateAccount}
+                  onClick={() => setIsDeactivateModalOpen(true)}
                   className="bg-transparent border border-[#ba1a1a] text-[#ba1a1a] hover:bg-[#ba1a1a] hover:text-white font-['Geist'] text-sm font-semibold px-6 py-2.5 rounded-full transition-colors whitespace-nowrap cursor-pointer disabled:opacity-50"
                 >
                   {deactivating ? 'Deactivating...' : 'Deactivate Account'}
@@ -268,8 +268,8 @@ export default function cleanersSettings({ isStandalone = true }) {
                     className="flex flex-row justify-between items-center py-4 border-b border-[#c3c5d9]/20 last:border-0 hover:bg-[#f3f3f6]/50 px-2 rounded-lg transition-colors cursor-pointer group"
                   >
                     <div className="flex flex-col gap-1 pr-4">
-                      <span className="font-['Geist'] text-sm font-semibold text-[#1a1c1e] group-hover:text-[#003ec7] transition-colors">Payout Confirmations</span>
-                      <span className="font-['Inter'] text-xs text-[#434656]">Get notified via email when funds are transferred to your M-Pesa.</span>
+                      <span className="font-['Geist'] text-sm font-semibold text-[#1a1c1e] group-hover:text-[#003ec7] transition-colors">Payout Invoices</span>
+                      <span className="font-['Inter'] text-xs text-[#434656]">Email confirmations when platform settlements are processed.</span>
                     </div>
                     <div className={`relative w-11 h-6 rounded-full shrink-0 transition-colors duration-300 ${notifications.payoutConfirmations ? 'bg-[#003ec7]' : 'bg-[#e2e2e5]'}`}>
                       <div className={`absolute top-1 bg-white w-4 h-4 rounded-full shadow-xs transition-transform duration-300 ${notifications.payoutConfirmations ? 'left-6' : 'left-1 bg-[#737688]'}`}></div>
@@ -312,39 +312,45 @@ export default function cleanersSettings({ isStandalone = true }) {
           {activeTab === 'security' && (
             <div className="flex flex-col gap-6 w-full animate-fadeIn">
               <div className="bg-white rounded-2xl shadow-xs border border-[#c3c5d9]/10 p-6 lg:p-8 flex flex-col gap-6 relative overflow-hidden">
-                <div className="flex items-center gap-3 mb-2">
-                  <span className="material-symbols-outlined text-[#003ec7] text-[24px]">lock</span>
-                  <h2 className="font-['Geist'] text-xl font-semibold text-[#1a1c1e]">Password & Security</h2>
+                <div className="flex items-center gap-3">
+                  <span className="material-symbols-outlined text-[#003ec7] text-[24px]">lock_reset</span>
+                  <h2 className="font-['Geist'] text-xl font-semibold text-[#1a1c1e]">Change Password</h2>
                 </div>
-                {/* Change Password */}
-                <div className="flex flex-col gap-4 max-w-lg w-full mb-4">
-                  <h3 className="font-['Geist'] text-sm font-semibold text-[#1a1c1e]">Change Password</h3>
-                  <div className="flex flex-col gap-3">
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="flex flex-col gap-2">
+                    <label className="font-['Geist'] text-xs font-semibold text-[#434656] uppercase tracking-wider">Current Password</label>
                     <input
                       type="password"
-                      placeholder="Current Password"
+                      placeholder="••••••••"
                       value={security.currentPassword}
                       onChange={(e) => setSecurity({ ...security, currentPassword: e.target.value })}
                       className="w-full bg-[#f3f3f6] border border-[#c3c5d9]/30 text-[#1a1c1e] font-['Inter'] text-sm px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#003ec7]/50 focus:bg-white transition-all"
                     />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="font-['Geist'] text-xs font-semibold text-[#434656] uppercase tracking-wider">New Password</label>
                     <input
                       type="password"
-                      placeholder="New Password"
+                      placeholder="••••••••"
                       value={security.newPassword}
                       onChange={(e) => setSecurity({ ...security, newPassword: e.target.value })}
                       className="w-full bg-[#f3f3f6] border border-[#c3c5d9]/30 text-[#1a1c1e] font-['Inter'] text-sm px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#003ec7]/50 focus:bg-white transition-all"
                     />
+                  </div>
+                  <div className="flex flex-col gap-2 md:col-span-2">
+                    <label className="font-['Geist'] text-xs font-semibold text-[#434656] uppercase tracking-wider">Confirm New Password</label>
                     <input
                       type="password"
-                      placeholder="Confirm New Password"
+                      placeholder="••••••••"
                       value={security.confirmPassword}
                       onChange={(e) => setSecurity({ ...security, confirmPassword: e.target.value })}
                       className="w-full bg-[#f3f3f6] border border-[#c3c5d9]/30 text-[#1a1c1e] font-['Inter'] text-sm px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#003ec7]/50 focus:bg-white transition-all"
                     />
                     <button
                       type="button"
-                      onClick={() => alert('Password updated successfully!')}
-                      className="bg-[#00c1fd] hover:bg-[#75d1ff] text-[#004b65] font-['Geist'] text-sm font-semibold px-6 py-2.5 rounded-full self-start transition-colors mt-2 cursor-pointer"
+                      onClick={() => toast.success('Password updated successfully!')}
+                      className="bg-primary hover:bg-primary-container text-white font-['Geist'] text-sm font-semibold px-6 py-2.5 rounded-full self-start transition-colors mt-2 cursor-pointer shadow-xs"
                     >
                       Update Password
                     </button>
@@ -403,7 +409,7 @@ export default function cleanersSettings({ isStandalone = true }) {
                   </div>
                   <button
                     type="button"
-                    onClick={() => alert('Session revoked.')}
+                    onClick={() => toast.success('Session revoked.')}
                     className="text-[#ba1a1a] opacity-0 group-hover:opacity-100 transition-opacity font-['Geist'] text-xs font-semibold px-3 py-1 hover:bg-[#ffdad6] rounded-lg cursor-pointer"
                   >
                     Revoke
@@ -418,13 +424,25 @@ export default function cleanersSettings({ isStandalone = true }) {
             <div className="flex flex-col gap-6 w-full animate-fadeIn">
               <div className="bg-white rounded-2xl shadow-xs border border-[#c3c5d9]/10 p-6 lg:p-8 flex flex-col gap-6 relative overflow-hidden min-h-[400px] flex items-center justify-center text-center">
                 <span className="material-symbols-outlined text-[#737688] text-[48px] mb-2 opacity-50">construction</span>
-                <h2 className="font-['Geist'] text-xl font-semibold text-[#1a1c1e]">App Preferences</h2>
-                <p className="font-['Inter'] text-sm text-[#434656] max-w-sm">Theme and density settings are currently managed by your system preferences. Custom overrides coming soon.</p>
+                <h3 className="font-['Geist'] text-xl font-bold text-[#1a1c1e]">App Preferences</h3>
+                <p className="font-['Inter'] text-sm text-[#434656] max-w-md">Customize your theme, notification sounds, and default currency display.</p>
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* Confirmation Modal for Account Deactivation */}
+      <ConfirmationModal
+        isOpen={isDeactivateModalOpen}
+        onClose={() => setIsDeactivateModalOpen(false)}
+        onConfirm={handleConfirmDeactivate}
+        title="Deactivate Cleaner Account"
+        warningMessage="Are you sure you want to deactivate your cleaner account? All your services will immediately be hidden from the customer homepage and your listing will be paused until an administrator re-activates it."
+        confirmText="Deactivate Account"
+        type="danger"
+        isLoading={deactivating}
+      />
     </div>
   );
 
@@ -440,4 +458,3 @@ export default function cleanersSettings({ isStandalone = true }) {
     </div>
   );
 }
-

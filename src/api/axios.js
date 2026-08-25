@@ -11,20 +11,6 @@ const api = axios.create({
   },
 });
 
-// Request interceptor: Attach JWT Bearer token if present
-api.interceptors.request.use(
-  (config) => {
-    try {
-      const token = localStorage.getItem('aura_auth_token');
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-    } catch (e) {}
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -36,6 +22,22 @@ api.interceptors.response.use(
       window.dispatchEvent(
         new CustomEvent('platform:maintenance', {
           detail: error.response.data?.message || 'Platform is under maintenance.'
+        })
+      );
+    } else if (error.response && error.response.status === 401) {
+      // Dispatch unauthorized event if session expired
+      const isAuthEndpoint = error.config?.url?.includes('/auth/login') || error.config?.url?.includes('/auth/me');
+      if (!isAuthEndpoint) {
+        window.dispatchEvent(
+          new CustomEvent('platform:unauthorized', {
+            detail: 'Your session has expired. Please sign in again.'
+          })
+        );
+      }
+    } else if (!error.response && error.code === 'ERR_NETWORK') {
+      window.dispatchEvent(
+        new CustomEvent('platform:network-error', {
+          detail: 'Unable to connect to the server. Please check your internet connection.'
         })
       );
     }

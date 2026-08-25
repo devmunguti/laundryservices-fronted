@@ -2,63 +2,63 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { orderApi } from '../api/orderApi';
 import { paymentApi } from '../api/paymentApi';
-import { systemSettingsApi } from '../api/systemSettingsApi';
+import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../hooks/useAuth';
-import PickupLocationPicker from '../components/navigation/PickupLocationPicker';
+import toast from 'react-hot-toast';
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
+  const { settings } = useSettings();
 
-  // Retrieve order details if passed via navigation state, or fallback to defaults
+  // Track Order Modal State
+  const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
+  const [trackingInput, setTrackingInput] = useState('');
+  const [trackingLoading, setTrackingLoading] = useState(false);
+  const [trackingError, setTrackingError] = useState('');
+
+  // Retrieve order details passed from catalog / shop page or fallback to defaults
   const orderData = location.state || {
     serviceName: 'Standard Wash & Fold',
+    category: 'Wash & Fold',
     details: '1 Bag (approx. 5kg)',
     servicePrice: 1200,
-    deliveryOption: 'Student Campus Zone',
+    deliveryOption: 'Standard Pickup & Delivery',
     deliveryPrice: 200,
     tillNumber: '8995354',
+    providerName: 'Partner Cleaner',
   };
 
-  const totalAmount = orderData.servicePrice + orderData.deliveryPrice;
+  const totalAmount = (Number(orderData.servicePrice) || 0) + (Number(orderData.deliveryPrice) || 0);
 
-  // Form states
-  const [activeOrder, setActiveOrder] = useState(null);
-  const [orderApiResponse, setOrderApiResponse] = useState(null);
+  // Multi-step state: 1 = Details & Pickup Point, 2 = M-Pesa Payment
+  const [currentStep, setCurrentStep] = useState(1);
 
-  // Client Details Form State
+  // Step 1: Client & Pickup Details
   const [clientName, setClientName] = useState(user?.fullName || '');
   const [clientPhone, setClientPhone] = useState(user?.phone || '');
   const [clientEmail, setClientEmail] = useState(user?.email || '');
-
-  // Campus Pickup & House Location State
-  const [campusLocations, setCampusLocations] = useState([
-    {
-      name: 'Custom House / Apartment Address',
-      zone: 'Off-Campus',
-      description: 'Provide custom building name and room number',
-      instructions: ''
-    }
-  ]);
-  const [selectedCampusLocation, setSelectedCampusLocation] = useState('');
-  const [customStreet, setCustomStreet] = useState('');
+  const [pickupAddress, setPickupAddress] = useState('');
   const [houseNumber, setHouseNumber] = useState('');
   const [pickupInstructions, setPickupInstructions] = useState('');
-
-  // Live GPS Location Pin State
   const [gpsCoords, setGpsCoords] = useState(null);
+  const [locatingGps, setLocatingGps] = useState(false);
+  const [step1Error, setStep1Error] = useState('');
 
-  // Payment states
+  // Step 2: Payment states
+  const [activeOrder, setActiveOrder] = useState(null);
   const [phone, setPhone] = useState(user?.phone || '');
   const [paymentStatusMsg, setPaymentStatusMsg] = useState('');
   const [stkLoading, setStkLoading] = useState(false);
   const [stkSuccess, setStkSuccess] = useState(false);
   const [stkError, setStkError] = useState('');
-
+  const [stkCountdown, setStkCountdown] = useState(60);
   const [copied, setCopied] = useState(false);
+  const pollIntervalRef = React.useRef(null);
+  const countdownIntervalRef = React.useRef(null);
 
-  // Manual confirmation: 'code' = direct input, 'message' = full SMS paste
+  // Manual confirmation states
   const [manualInputMode, setManualInputMode] = useState('code');
   const [transactionCode, setTransactionCode] = useState('');
   const [mpesaMessage, setMpesaMessage] = useState('');
@@ -66,136 +66,89 @@ export default function CheckoutPage() {
   const [confirmSuccess, setConfirmSuccess] = useState(false);
   const [confirmError, setConfirmError] = useState('');
   const [extractedCode, setExtractedCode] = useState(null);
-  const [extractedHint, setExtractedHint] = useState(null);
 
-  // Fetch live campus locations dynamically from backend settings
+  // Keep phone prefilled if client phone is typed in Step 1
   useEffect(() => {
-    const fetchCampusLocs = async () => {
-      try {
-        const res = await systemSettingsApi.getPublicSettings();
-        const rawList = (res.success && Array.isArray(res.data?.campusLocations))
-          ? res.data.campusLocations
-          : [];
+    if (clientPhone && !phone) {
+      setPhone(clientPhone);
+    }
+  }, [clientPhone, phone]);
 
-        const formatted = rawList.map(loc => ({
-          name: loc.name,
-          zone: loc.zone || 'Campus Zone',
-          description: loc.description || '',
-          instructions: loc.instructions || '',
-          coordinates: loc.coordinates || null
-        }));
-
-        // Always provide custom building / off-campus address option
-        formatted.push({
-          name: 'Custom House / Apartment Address',
-          zone: 'Off-Campus',
-          description: 'Provide custom building name and room number',
-          instructions: ''
+  // Handle GPS location detection
+  const handleDetectLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not supported by your browser.');
+      return;
+    }
+    setLocatingGps(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGpsCoords({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy
         });
-
-        setCampusLocations(formatted);
-        if (formatted.length > 0) {
-          setSelectedCampusLocation(prev => {
-            const exists = formatted.some(l => l.name === prev);
-            return exists ? prev : formatted[0].name;
-          });
-          if (formatted[0].instructions && !pickupInstructions) {
-            setPickupInstructions(formatted[0].instructions);
-          }
+        setLocatingGps(false);
+        toast.success('Live GPS coordinates captured!');
+        if (!pickupAddress) {
+          setPickupAddress(`GPS Pin (${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)})`);
         }
-      } catch (e) {
-        console.warn('Failed to load dynamic campus locations:', e);
-      }
-    };
-    fetchCampusLocs();
-  }, []);
+      },
+      (err) => {
+        console.warn('GPS location error:', err);
+        setLocatingGps(false);
+        toast.error('Could not retrieve GPS coordinates. Please enter your address manually.');
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const copyToClipboard = (text) => {
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text);
       setCopied(true);
+      toast.success('Copied to clipboard!');
       setTimeout(() => setCopied(false), 2000);
     }
   };
 
-  // Poll backend for PayHero payment status confirmation
-  const pollPaymentStatus = (paymentId, fallbackOrderRef) => {
-    let attempts = 0;
-    const maxAttempts = 150; // 5 minutes max polling (150 * 2s)
+  // Step 1 Validation & Proceed to Step 2
+  const handleProceedToPayment = (e) => {
+    e.preventDefault();
+    setStep1Error('');
 
-    const interval = setInterval(async () => {
-      attempts++;
-      try {
-        const res = await paymentApi.getPaymentStatus(paymentId);
-        setOrderApiResponse(res);
-        // Backend wraps the payload under res.data (not res.payment)
-        const paymentData = res.data;
-        if (res.success && paymentData) {
-          const currentStatus = (paymentData.status || '').toLowerCase();
+    if (!clientName.trim()) {
+      setStep1Error('Please enter your full name.');
+      return;
+    }
+    const cleanPh = clientPhone.trim().replace(/\s+/g, '');
+    if (!cleanPh || cleanPh.length < 9) {
+      setStep1Error('Please enter a valid phone number (e.g. 0712345678).');
+      return;
+    }
+    if (!pickupAddress.trim()) {
+      setStep1Error('Please specify your pickup area, street, or apartment name.');
+      return;
+    }
 
-          if (currentStatus === 'paid') {
-            clearInterval(interval);
-            setStkLoading(false);
-            setStkSuccess(true);
-            // Extract orderRef from polled response, fallbackOrderRef, or orderApiResponse
-            const orderRef = paymentData?.orderRef || fallbackOrderRef || orderApiResponse?.data?.orderRef;
-            setPaymentStatusMsg('Payment confirmed! Redirecting to your order tracking page...');
-            setTimeout(() => {
-              if (orderRef) {
-                navigate(`/track-order/${orderRef}`);
-              } else {
-                navigate('/');
-              }
-            }, 1200);
-          } else if (currentStatus === 'cancelled') {
-            clearInterval(interval);
-            setStkLoading(false);
-            setStkError('M-Pesa payment request was cancelled on your phone.');
-            setPaymentStatusMsg('');
-          } else if (currentStatus === 'expired') {
-            clearInterval(interval);
-            setStkLoading(false);
-            setStkError('The payment request expired. Please try initiating a new payment.');
-            setPaymentStatusMsg('');
-          } else if (currentStatus === 'failed') {
-            clearInterval(interval);
-            setStkLoading(false);
-            setStkError(paymentData.failureReason || 'M-Pesa payment could not be completed. Please try again.');
-            setPaymentStatusMsg('');
-          } else {
-            setPaymentStatusMsg('Waiting for M-Pesa confirmation... Please check your phone and enter your PIN.');
-          }
-        }
-      } catch (err) {
-        console.error('Status poll error:', err);
-      }
-
-      if (attempts >= maxAttempts) {
-        clearInterval(interval);
-        setStkLoading(false);
-        setStkError('Payment confirmation timed out. If you completed payment, please check your order history or track using your M-Pesa code.');
-      }
-    }, 2000);
+    setPhone(cleanPh);
+    setCurrentStep(2);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Helper to ensure order exists in MongoDB (reuses activeOrder if already created in session)
+  // Helper to ensure order exists in MongoDB
   const getOrCreateOrder = async (activeServiceId) => {
     if (activeOrder?._id) {
       return activeOrder;
     }
 
-    const isCustom =
-      selectedCampusLocation === 'Custom House / Apartment Address' ||
-      selectedCampusLocation === 'Not on the list (Custom Location)' ||
-      selectedCampusLocation === 'CUSTOM_LOCATION' ||
-      !selectedCampusLocation;
-    const effectiveStreet = isCustom ? (customStreet || 'Nairobi') : selectedCampusLocation;
+    const effectiveStreet = pickupAddress.trim() || 'Nairobi';
 
     const orderRes = await orderApi.createOrder({
       items: [
         {
           serviceId: activeServiceId,
-          quantity: 1
+          quantity: Number(orderData.quantity) || 1
         }
       ],
       customerDetails: {
@@ -206,7 +159,6 @@ export default function CheckoutPage() {
       pickupAddress: {
         street: effectiveStreet,
         city: 'Nairobi',
-        campusLocation: selectedCampusLocation,
         houseNumber: houseNumber.trim(),
         instructions: pickupInstructions.trim(),
         coordinates: gpsCoords ? { lat: gpsCoords.lat, lng: gpsCoords.lng, accuracy: gpsCoords.accuracy } : undefined,
@@ -228,7 +180,95 @@ export default function CheckoutPage() {
     return orderRes.data.order;
   };
 
-  // Handle STK Push / Checkout Request to backend
+  const handleCancelStk = () => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    setStkLoading(false);
+    setPaymentStatusMsg('');
+    setStkError('M-Pesa payment prompt cancelled. You can try again or use the Till number below.');
+  };
+
+  // Poll backend for PayHero payment confirmation
+  const pollPaymentStatus = (paymentId, fallbackOrderRef) => {
+    let attempts = 0;
+    const maxAttempts = 30; // 60 seconds total at 2s interval
+    setStkCountdown(60);
+
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+
+    // 1-second countdown ticker
+    countdownIntervalRef.current = setInterval(() => {
+      setStkCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(countdownIntervalRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    pollIntervalRef.current = setInterval(async () => {
+      attempts++;
+      try {
+        const res = await paymentApi.getPaymentStatus(paymentId);
+        const paymentData = res.data;
+        if (res.success && paymentData) {
+          const currentStatus = (paymentData.status || '').toLowerCase();
+
+          if (currentStatus === 'paid') {
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+            setStkLoading(false);
+            setStkSuccess(true);
+            const orderRef = paymentData?.orderRef || fallbackOrderRef;
+            setPaymentStatusMsg('Payment confirmed! Redirecting to your order tracking page...');
+            setTimeout(() => {
+              navigate(orderRef ? `/track-order/${orderRef}` : '/');
+            }, 1200);
+          } else if (currentStatus === 'cancelled') {
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+            setStkLoading(false);
+            setStkError('M-Pesa payment request was cancelled on your phone.');
+            setPaymentStatusMsg('');
+          } else if (currentStatus === 'expired') {
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+            setStkLoading(false);
+            setStkError('The payment request expired. Please try initiating a new payment.');
+            setPaymentStatusMsg('');
+          } else if (currentStatus === 'failed') {
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+            setStkLoading(false);
+            setStkError(paymentData.failureReason || 'M-Pesa payment could not be completed.');
+            setPaymentStatusMsg('');
+          } else {
+            setPaymentStatusMsg('Waiting for M-Pesa confirmation... Check your phone and enter PIN.');
+          }
+        }
+      } catch (err) {
+        console.error('Status poll error:', err);
+      }
+
+      if (attempts >= maxAttempts) {
+        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+        if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+        setStkLoading(false);
+        setStkError('M-Pesa prompt timed out. You can re-send prompt or confirm via M-Pesa message below.');
+      }
+    }, 2000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    };
+  }, []);
+
+  // Handle STK Push Request
   const handleStkPush = async (e) => {
     e.preventDefault();
     setStkError('');
@@ -241,27 +281,20 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (!clientName.trim()) {
-      setStkError('Please enter your full name so the cleaner can identify your order.');
-      return;
-    }
-
     try {
       setStkLoading(true);
 
       const activeServiceId = orderData.serviceId || orderData._id;
       if (!activeServiceId) {
-        setStkError('No valid MongoDB service selected. Please return to the services catalog.');
+        setStkError('No valid service selected. Please return to catalog.');
         setStkLoading(false);
         return;
       }
 
-      // Step 1: Get existing or create Order in MongoDB
       const currentOrder = await getOrCreateOrder(activeServiceId);
       const createdOrderId = currentOrder._id;
       const createdOrderRef = currentOrder.orderRef;
 
-      // Step 2: Trigger PayHero STK Push via backend endpoint
       const payRes = await paymentApi.checkoutPayment({
         orderId: createdOrderId,
         paymentMethod: 'mpesa',
@@ -270,10 +303,9 @@ export default function CheckoutPage() {
 
       if (payRes.success && payRes.data?.paymentId) {
         setPaymentStatusMsg('Check your phone for the M-Pesa prompt and enter your PIN.');
-        // Poll for backend confirmation from PayHero callback and redirect to track order
         pollPaymentStatus(payRes.data.paymentId, createdOrderRef);
       } else {
-        setStkError(payRes.message || 'Unable to send M-Pesa prompt.');
+        setStkError(payRes.message || 'Unable to send M-Pesa prompt. Please try again or use the Till number.');
         setStkLoading(false);
       }
     } catch (err) {
@@ -282,23 +314,22 @@ export default function CheckoutPage() {
     }
   };
 
-  // Handle Manual Confirmation — routes to verifyManualPayment (supports both modes)
+  // Handle Manual Transaction Code Verification
   const handleConfirmPayment = async (e) => {
     e.preventDefault();
     setConfirmError('');
     setExtractedCode(null);
-    setExtractedHint(null);
 
     const isMessageMode = manualInputMode === 'message';
     const code = isMessageMode ? null : transactionCode.trim().toUpperCase();
     const message = isMessageMode ? mpesaMessage.trim() : null;
 
-    if (!isMessageMode && code.length < 6) {
-      setConfirmError('Please enter a valid M-Pesa transaction code (e.g. QKT1234567)');
+    if (!isMessageMode && (!code || code.length < 6)) {
+      setConfirmError('Please enter a valid M-Pesa transaction code (e.g. QKT1234567).');
       return;
     }
     if (isMessageMode && (!message || message.length < 20)) {
-      setConfirmError('Please paste your complete M-Pesa confirmation SMS message.');
+      setConfirmError('Please paste your full M-Pesa confirmation SMS message.');
       return;
     }
 
@@ -307,17 +338,15 @@ export default function CheckoutPage() {
 
       const activeServiceId = orderData.serviceId || orderData._id;
       if (!activeServiceId) {
-        setConfirmError('No valid service selected. Please return to catalog.');
+        setConfirmError('No valid service selected.');
         setConfirmLoading(false);
         return;
       }
 
-      // Step 1: Get existing or create Order in MongoDB
       const currentOrder = await getOrCreateOrder(activeServiceId);
       const createdOrderId = currentOrder._id;
       const createdOrderRef = currentOrder.orderRef;
 
-      // Step 2: Verify M-Pesa payment via backend verification service
       const verifyRes = await paymentApi.verifyManualPayment({
         orderId: createdOrderId,
         ...(isMessageMode ? { message } : { transactionCode: code })
@@ -338,18 +367,13 @@ export default function CheckoutPage() {
           navigate(`/track-order/${verifyRes.orderRef}`);
         }, 1500);
       } else {
-        // Map backend state enum to user-friendly messages
         const stateMessages = {
-          EXTRACTION_FAILED: `Could not extract a transaction code from your message. ${verifyRes.hint || 'Please check that you pasted the complete M-Pesa SMS.'}`,
-          INVALID_CODE_FORMAT: `"${verifyRes.extractedCode || code}" is not a valid M-Pesa receipt code. Please check and try again.`,
-          AMOUNT_MISMATCH: `Payment amount mismatch. Expected KES ${verifyRes.expected}, message shows KES ${verifyRes.received}. Please confirm you used the correct payment.`,
+          EXTRACTION_FAILED: `Could not extract a transaction code from your message. ${verifyRes.hint || 'Please paste the full SMS.'}`,
+          INVALID_CODE_FORMAT: `"${verifyRes.extractedCode || code}" is not a valid M-Pesa receipt code.`,
+          AMOUNT_MISMATCH: `Amount mismatch. Expected KES ${verifyRes.expected}, message shows KES ${verifyRes.received}.`,
           ALREADY_USED: 'This M-Pesa transaction code has already been used for another order.',
-          FORBIDDEN: 'You are not authorized to confirm this order.',
         };
         setConfirmError(stateMessages[verifyRes.state] || verifyRes.message || 'Failed to verify transaction code.');
-        if (verifyRes.state === 'EXTRACTION_FAILED' && verifyRes.hint) {
-          setExtractedHint(verifyRes.hint);
-        }
       }
     } catch (err) {
       const respData = err.response?.data;
@@ -361,443 +385,744 @@ export default function CheckoutPage() {
         }, 1500);
         return;
       }
-      const state = respData?.state;
-      const stateMessages = {
-        EXTRACTION_FAILED: respData?.hint || 'Could not extract a code from your message. Please paste the complete M-Pesa SMS.',
-        AMOUNT_MISMATCH: `Amount mismatch: expected KES ${respData?.expected}, message shows KES ${respData?.received}.`,
-        ALREADY_USED: 'This M-Pesa transaction code has already been used for another order.',
-      };
-      setConfirmError(stateMessages[state] || respData?.message || err.message || 'Error processing payment confirmation.');
+      setConfirmError(respData?.message || err.message || 'Error confirming payment.');
     } finally {
       setConfirmLoading(false);
     }
   };
 
+  const handleTrackSubmit = async (e) => {
+    e.preventDefault();
+    const cleanQuery = trackingInput.trim();
+    if (!cleanQuery) {
+      setTrackingError('Please enter your M-Pesa code or Order #');
+      return;
+    }
+
+    try {
+      setTrackingLoading(true);
+      setTrackingError('');
+      const res = await orderApi.getOrderTracking(cleanQuery);
+
+      if (res.success && res.data?.orderRef) {
+        setIsTrackingModalOpen(false);
+        setTrackingInput('');
+        navigate(`/track-order/${res.data.orderRef}`);
+      } else {
+        setTrackingError(res.message || 'No order found with this M-Pesa code or Order number.');
+      }
+    } catch (err) {
+      setTrackingError(err.response?.data?.message || 'Order not found. Please verify your M-Pesa transaction code or order number.');
+    } finally {
+      setTrackingLoading(false);
+    }
+  };
+
+  const tillNumber = orderData.tillNumber || '8995354';
+  const providerName = orderData.providerName || 'Partner Cleaner';
+  const providerId = orderData.providerId || null;
 
   return (
-    <div className="bg-surface font-body-md text-on-surface min-h-screen">
-      {/* Fixed Header */}
-      <header className="fixed top-0 w-full z-50 glass bg-surface/80 shadow-[0_1px_8px_rgba(0,0,0,0.04)] pt-safe">
-        <div className="h-16 px-container-padding-mobile flex items-center gap-unit">
+    <div className="bg-background font-body-md text-on-surface min-h-screen">
+      {/* Enhanced Checkout Navigation Header */}
+      <header className="fixed top-0 left-0 right-0 h-20 bg-surface/80 backdrop-blur-xl z-40 flex items-center justify-between px-4 sm:px-6 lg:px-12 shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+        {/* Left: Dynamic Back Button & Brand Logo */}
+        <div className="flex items-center gap-3 sm:gap-6">
           <button
             type="button"
-            className="w-11 h-11 -ml-2 flex items-center justify-center text-on-surface hover:bg-surface-container rounded-full transition-colors"
-            onClick={() => navigate(-1)}
-            aria-label="Go back"
+            onClick={() => {
+              if (currentStep === 2) {
+                setCurrentStep(1);
+              } else if (providerId) {
+                navigate(`/cleaner/${providerId}`);
+              } else {
+                navigate('/');
+              }
+            }}
+            className="flex items-center gap-1.5 text-xs font-bold text-on-surface-variant hover:text-primary transition-colors bg-surface-container px-3 sm:px-3.5 py-2 rounded-full cursor-pointer shrink-0"
+            title={currentStep === 2 ? 'Return to Step 1' : 'Back to Shop'}
           >
-            <span className="material-symbols-outlined">arrow_back</span>
+            <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+            <span className="hidden sm:inline">
+              {currentStep === 2 ? 'Edit Details' : providerId ? `${providerName} Shop` : 'All Cleaners'}
+            </span>
+            <span className="sm:hidden">Back</span>
           </button>
-          <h1 className="font-headline-md text-headline-md text-on-surface truncate">
-            Service Details & Checkout
-          </h1>
+
+          {/* Cleanly Logo Home Button */}
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="flex items-center gap-2.5 px-3 py-1.5 rounded-2xl hover:bg-surface-container transition-all group cursor-pointer border border-transparent hover:border-outline-variant/30"
+            title="Go to Home"
+            aria-label="Cleanly Home"
+          >
+            <img
+              alt="Cleanly Logo"
+              className="h-8 w-auto object-contain group-hover:scale-105 transition-transform"
+              src="https://lh3.googleusercontent.com/aida/AP1WRLta25wmxF0oJh9s5exB3Ml7fMmY_esGvwYxcKOGZXWLBepx1CHhANhjBXqPbbNnTNm7MIbDRR3Ab1Vj9ov3fBDnLO5WMZag_dDQfQOL4Trb-Yxm9ddXDK3GQcZCyhVXI96L6P4dWgbcfnOjDNoJfkSUIj_KSAzA2jUTk3ZD3csi9B1PcK3Z8tfcLndPQbkxp7gOwemuQOl7rko664DBJXqzta58JFFYVZgGIT-K6ed6EbOP4vs3Fde4xos"
+            />
+            <div className="flex flex-col items-start text-left">
+              <span className="font-headline-md text-headline-md text-primary tracking-tight font-semibold leading-tight group-hover:text-primary/90">
+                {settings?.platformName || 'Cleanly'}
+              </span>
+              <span className="text-[10px] text-on-surface-variant font-medium flex items-center gap-0.5 leading-none">
+                <span className="material-symbols-outlined text-[12px] text-primary">home</span>
+                <span>Home</span>
+              </span>
+            </div>
+          </button>
+        </div>
+
+        {/* Center: Cleaner Storefront & Security Badge */}
+        <div className="hidden lg:flex items-center gap-3">
+          <div
+            onClick={() => providerId && navigate(`/cleaner/${providerId}`)}
+            className={`flex items-center gap-2 bg-primary/10 text-primary px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors ${providerId ? 'cursor-pointer hover:bg-primary/20' : ''}`}
+            title="Assigned Cleaner Storefront"
+          >
+            <span className="material-symbols-outlined text-[16px]">storefront</span>
+            <span>{providerName}</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 bg-surface-container px-3 py-1.5 rounded-full font-medium">
+            <span className="material-symbols-outlined text-emerald-600 text-[15px]">verified_user</span>
+            <span>256-Bit SSL Secured</span>
+          </div>
+        </div>
+
+        {/* Right: Track Order, Support & User Avatar */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Quick Track Order Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsTrackingModalOpen(true);
+              setTrackingError('');
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-outline-variant/40 hover:bg-surface-container text-xs font-bold text-on-surface transition-colors cursor-pointer"
+            title="Track previous order"
+          >
+            <span className="material-symbols-outlined text-[16px] text-primary">local_shipping</span>
+            <span className="hidden sm:inline">Track Order</span>
+          </button>
+
+          {/* User Account / Portal Access */}
+          {isAuthenticated && user ? (
+            user.role === 'admin' ? (
+              <button
+                type="button"
+                onClick={() => navigate('/admin')}
+                className="px-3.5 py-2 rounded-full bg-slate-900 text-white font-semibold text-xs flex items-center gap-1 shadow-sm hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">admin_panel_settings</span>
+                <span className="hidden sm:inline">Admin</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => navigate('/provider')}
+                className="px-3.5 py-2 rounded-full bg-primary text-on-primary font-semibold text-xs flex items-center gap-1 shadow-sm hover:bg-primary/90 transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">dry_cleaning</span>
+                <span className="hidden sm:inline">Portal</span>
+              </button>
+            )
+          ) : (
+            <button
+              type="button"
+              className="w-9 h-9 rounded-full bg-primary hover:bg-primary/90 transition-colors flex items-center justify-center text-on-primary shadow-sm cursor-pointer"
+              onClick={() => navigate('/login')}
+              title="Access Portal Login"
+            >
+              <span className="material-symbols-outlined text-[20px]">person</span>
+            </button>
+          )}
         </div>
       </header>
 
-      {/* Main Content Container */}
-      <main className="relative w-full pt-20 bg-surface min-h-screen">
-        <div className="flex flex-col w-full pb-safe">
-          <div className="px-container-padding-mobile py-bento-gap flex flex-col gap-bento-gap max-w-[600px] mx-auto w-full">
+      {/* Interactive Track Order Modal */}
+      {isTrackingModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[200] flex items-center justify-center p-4">
+          <div className="bg-surface-container-lowest rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-8 border border-outline-variant/30 space-y-5 relative animate-in fade-in zoom-in duration-200">
+            {/* Close Button */}
+            <button
+              onClick={() => setIsTrackingModalOpen(false)}
+              className="absolute top-6 right-6 text-on-surface-variant hover:text-on-surface p-1.5 rounded-full hover:bg-surface-container transition-colors cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[20px]">close</span>
+            </button>
 
-            {/* Order Summary Bento */}
-            <section className="bg-surface-container-lowest rounded-xl p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-headline-md text-headline-md text-on-surface">Order Summary</h2>
-                <span className="material-symbols-outlined text-primary">receipt_long</span>
+            {/* Modal Header */}
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shadow-xs">
+                <span className="material-symbols-outlined text-[24px]">local_shipping</span>
               </div>
-              <div className="flex flex-col gap-4">
-                <div className="flex justify-between items-center py-2 border-b border-surface-variant">
-                  <div className="flex flex-col">
-                    <span className="font-body-md text-on-surface font-medium">{orderData.serviceName}</span>
-                    <span className="font-body-sm text-outline">{orderData.details}</span>
-                  </div>
-                  <span className="font-body-md text-on-surface font-semibold">
-                    KES {orderData.servicePrice.toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-surface-variant">
-                  <div className="flex flex-col">
-                    <span className="font-body-md text-on-surface font-medium">Pickup &amp; Delivery</span>
-                    <span className="font-body-sm text-outline">{orderData.deliveryOption}</span>
-                  </div>
-                  <span className="font-body-md text-on-surface font-semibold">
-                    KES {orderData.deliveryPrice.toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center pt-2 mt-2">
-                  <span className="font-headline-md text-body-lg text-on-surface">Total Amount</span>
-                  <span className="font-headline-md text-headline-md text-primary font-bold">
-                    KES {totalAmount.toLocaleString()}
-                  </span>
-                </div>
+              <div>
+                <h3 className="font-bold text-lg text-on-surface">Track Previous Order</h3>
+                <p className="text-xs text-on-surface-variant mt-0.5">
+                  Enter your M-Pesa receipt code or Order reference.
+                </p>
               </div>
-            </section>
+            </div>
 
-            {/* 1. Client Contact Details & House Pickup Location Section */}
-            <section className="bg-surface-container-lowest rounded-xl p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)] border border-outline-variant/30">
+            {/* Tracking Search Form */}
+            <form onSubmit={handleTrackSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5">
+                  M-Pesa Code or Order #
+                </label>
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-outline text-[20px]">
+                    receipt_long
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    placeholder="e.g. QKT1234567 or ORD-102938"
+                    value={trackingInput}
+                    onChange={(e) => {
+                      setTrackingInput(e.target.value);
+                      if (trackingError) setTrackingError('');
+                    }}
+                    className="w-full bg-surface-container py-3 pl-11 pr-4 rounded-xl text-sm font-mono text-on-surface outline-none border border-outline-variant/30 focus:border-primary focus:bg-surface transition-all uppercase placeholder:normal-case placeholder:font-sans"
+                  />
+                </div>
+                <span className="text-[11px] text-on-surface-variant mt-1.5 block">
+                  💡 Tip: You can paste the 10-character code from your M-Pesa SMS.
+                </span>
+              </div>
+
+              {trackingError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px] shrink-0">error</span>
+                  <span>{trackingError}</span>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsTrackingModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold text-on-surface-variant hover:bg-surface-container transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={trackingLoading || !trackingInput.trim()}
+                  className="flex-[2] py-2.5 rounded-xl text-sm font-bold bg-primary text-on-primary hover:bg-primary/90 shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  {trackingLoading ? (
+                    <>
+                      <span className="material-symbols-outlined animate-spin text-[18px]">sync</span>
+                      <span>Searching...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-[18px]">search</span>
+                      <span>Find Order</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Main Container */}
+      <main className="relative pt-24 pb-20 px-4 md:px-8 max-w-[840px] mx-auto min-h-screen">
+        {/* Step Progress Indicator */}
+        <div className="bg-surface-container-lowest rounded-2xl p-4 shadow-xs border border-surface-container/60 mb-8 mt-2">
+          <div className="flex items-center justify-between max-w-md mx-auto">
+            {/* Step 1 Pill */}
+            <div
+              onClick={() => setCurrentStep(1)}
+              className={`flex items-center gap-2 cursor-pointer transition-all ${currentStep === 1 ? 'text-primary font-bold' : 'text-on-surface-variant font-medium'}`}
+            >
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${currentStep === 1 ? 'bg-primary text-on-primary shadow-xs' : 'bg-emerald-100 text-emerald-800'}`}>
+                {currentStep > 1 ? <span className="material-symbols-outlined text-[16px]">check</span> : '1'}
+              </div>
+              <span className="text-xs md:text-sm">Details &amp; Pickup</span>
+            </div>
+
+            {/* Divider Line */}
+            <div className={`flex-1 h-0.5 mx-4 transition-all ${currentStep === 2 ? 'bg-primary' : 'bg-surface-container-high'}`}></div>
+
+            {/* Step 2 Pill */}
+            <div className={`flex items-center gap-2 transition-all ${currentStep === 2 ? 'text-primary font-bold' : 'text-on-surface-variant/60 font-medium'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${currentStep === 2 ? 'bg-primary text-on-primary shadow-xs' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                2
+              </div>
+              <span className="text-xs md:text-sm">M-Pesa Payment</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* STEP 1: YOUR DETAILS & PICKUP POINT */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {currentStep === 1 && (
+          <div className="space-y-6">
+            {/* Compact Order Summary Card */}
+            <div className="bg-surface-container-lowest rounded-3xl p-6 md:p-8 shadow-sm border border-surface-container/60">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                    <span className="material-symbols-outlined text-[20px]">person_pin_circle</span>
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                    <span className="material-symbols-outlined text-[22px]">local_laundry_service</span>
                   </div>
                   <div>
-                    <h2 className="font-headline-md text-headline-md text-on-surface">Your Details &amp; Pickup Point</h2>
-                    <p className="text-xs text-on-surface-variant">Helps the cleaner find your room/hostel quickly.</p>
+                    <h2 className="font-headline-md text-lg font-bold text-on-surface">Order Summary</h2>
+                    <p className="text-xs text-on-surface-variant">{providerName}</p>
                   </div>
                 </div>
-                <span className="bg-primary-container text-on-primary-container text-[11px] font-semibold px-2.5 py-1 rounded-full">Step 1 of 2</span>
+                <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">
+                  {orderData.category || 'Laundry Service'}
+                </span>
               </div>
 
-              <div className="flex flex-col gap-4">
-                {/* Full Name & Phone Number */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-on-surface flex items-center gap-1">
-                      <span>Full Name</span>
-                      <span className="text-error">*</span>
+              <div className="space-y-2.5 pt-3 border-t border-surface-container/60 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-on-surface-variant">{orderData.serviceName}</span>
+                  <span className="font-semibold text-on-surface">KES {Number(orderData.servicePrice).toLocaleString()}</span>
+                </div>
+                {orderData.details && (
+                  <p className="text-xs text-on-surface-variant/80 italic -mt-1">{orderData.details}</p>
+                )}
+                <div className="flex justify-between items-center">
+                  <span className="text-on-surface-variant">{orderData.deliveryOption || 'Pickup & Delivery'}</span>
+                  <span className="font-semibold text-on-surface">
+                    {orderData.deliveryPrice === 0 ? 'Free' : `KES ${Number(orderData.deliveryPrice).toLocaleString()}`}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center pt-3 mt-2 border-t border-surface-container/60">
+                  <span className="font-bold text-base text-on-surface">Total Amount</span>
+                  <span className="font-extrabold text-xl text-primary">KES {totalAmount.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Simplified Details & Pickup Form */}
+            <div className="bg-surface-container-lowest rounded-3xl p-6 md:p-8 shadow-sm border border-surface-container/60">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                  <span className="material-symbols-outlined text-[22px]">person_pin_circle</span>
+                </div>
+                <div>
+                  <h2 className="font-headline-md text-xl font-bold text-on-surface">Your Details &amp; Pickup Point</h2>
+                  <p className="text-xs text-on-surface-variant">Simple contact and location info for your laundry collection</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleProceedToPayment} className="space-y-4">
+                {/* Name & Phone */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-on-surface block mb-1.5">
+                      Full Name <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Brian Otieno"
+                      placeholder="e.g. Alex Kimani"
                       value={clientName}
                       onChange={(e) => setClientName(e.target.value)}
-                      className="w-full bg-[#F1F5F9] rounded-lg px-3.5 py-3 text-sm text-on-surface border border-transparent focus:bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                      className="w-full bg-surface-container px-4 py-3 rounded-xl text-sm text-on-surface border border-outline-variant/30 focus:border-primary focus:bg-surface outline-none transition-all"
                       required
                     />
                   </div>
 
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-on-surface flex items-center gap-1">
-                      <span>Phone Number (Calls/WhatsApp)</span>
-                      <span className="text-error">*</span>
+                  <div>
+                    <label className="text-xs font-bold text-on-surface block mb-1.5">
+                      Phone Number (Calls &amp; Updates) <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="tel"
-                      placeholder="0712345678"
+                      placeholder="e.g. 0712345678"
                       value={clientPhone}
                       onChange={(e) => {
                         setClientPhone(e.target.value);
-                        if (!phone) setPhone(e.target.value);
+                        setPhone(e.target.value);
                       }}
-                      className="w-full bg-[#F1F5F9] rounded-lg px-3.5 py-3 text-sm text-on-surface border border-transparent focus:bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                      className="w-full bg-surface-container px-4 py-3 rounded-xl text-sm text-on-surface border border-outline-variant/30 focus:border-primary focus:bg-surface outline-none transition-all"
                       required
                     />
                   </div>
                 </div>
 
                 {/* Email Address */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold text-on-surface">
-                    Email Address (For receipts &amp; live order tracking)
+                <div>
+                  <label className="text-xs font-bold text-on-surface block mb-1.5">
+                    Email Address <span className="text-xs text-on-surface-variant font-normal">(Optional, for digital receipt)</span>
                   </label>
                   <input
                     type="email"
-                    placeholder="e.g. brian@university.ac.ke"
+                    placeholder="e.g. alex@example.com"
                     value={clientEmail}
                     onChange={(e) => setClientEmail(e.target.value)}
-                    className="w-full bg-[#F1F5F9] rounded-lg px-3.5 py-3 text-sm text-on-surface border border-transparent focus:bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                    className="w-full bg-surface-container px-4 py-3 rounded-xl text-sm text-on-surface border border-outline-variant/30 focus:border-primary focus:bg-surface outline-none transition-all"
                   />
                 </div>
 
-                {/* Pickup Location, Campus Hubs, OSM Place Search & Live Map */}
-                <div className="pt-2 border-t border-surface-variant/40">
-                  <PickupLocationPicker
-                    campusLocations={campusLocations}
-                    selectedCampusLocation={selectedCampusLocation}
-                    onSelectCampusLocation={setSelectedCampusLocation}
-                    customStreet={customStreet}
-                    onChangeCustomStreet={setCustomStreet}
-                    houseNumber={houseNumber}
-                    onChangeHouseNumber={setHouseNumber}
-                    pickupInstructions={pickupInstructions}
-                    onChangePickupInstructions={setPickupInstructions}
-                    gpsCoords={gpsCoords}
-                    onGpsCoordsChange={setGpsCoords}
-                  />
-                </div>
-              </div>
-            </section>
-
-            {/* M-Pesa Payment Instructions Bento */}
-            <section className="bg-surface-container-highest rounded-xl p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)] relative overflow-hidden">
-              <div className="absolute -top-10 -right-10 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none"></div>
-
-              <div className="flex items-center gap-3 mb-4 relative z-10">
-                <div className="w-10 h-10 rounded-full bg-surface-container-lowest flex items-center justify-center shadow-sm">
-                  <span className="material-symbols-outlined text-secondary font-bold" style={{ fontVariationSettings: "'FILL' 1" }}>
-                    phone_iphone
-                  </span>
-                </div>
-                <div>
-                  <h2 className="font-headline-md text-headline-md text-on-surface">M-Pesa Payment (Step 2 of 2)</h2>
-                  <p className="text-xs text-on-surface-variant">Recipient Till: <strong className="text-primary font-mono">{orderData.tillNumber || '8995354'}</strong> ({orderData.providerName || 'Laundry Provider'})</p>
-                </div>
-              </div>
-
-              {/* Payment Channel Confirmation Badge & Transparency Mode */}
-              <div className="bg-emerald-50/80 border border-emerald-200 rounded-lg p-3.5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-2 text-xs text-emerald-900">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-emerald-600 text-lg">verified_user</span>
+                {/* Clean Pickup Location Section */}
+                <div className="pt-3 border-t border-surface-container/60 space-y-4">
                   <div>
-                    <span className="font-semibold block">
-                      {orderData.tillNumber && orderData.tillNumber !== '8995354'
-                        ? 'Direct Provider Payment (0% Platform Fee)'
-                        : 'Official Aura Platform Escrow Channel'}
-                    </span>
-                    <span className="text-[11px] text-emerald-700">
-                      {orderData.tillNumber && orderData.tillNumber !== '8995354'
-                        ? `Funds go 100% directly to ${orderData.providerName || 'Provider'}`
-                        : 'Protected payment with instant cleaner notification'}
-                    </span>
-                  </div>
-                </div>
-                <span className="bg-emerald-100 text-emerald-800 font-mono font-bold px-2.5 py-1 rounded text-center">Till #{orderData.tillNumber || '8995354'}</span>
-              </div>
-
-              <div className="flex flex-col gap-6 relative z-10">
-                {/* Option 1: STK Push Prompt */}
-                <form onSubmit={handleStkPush} className="flex flex-col gap-3">
-                  <h3 className="font-label-md text-label-md text-primary uppercase tracking-wider">
-                    Option 1: M-Pesa Express STK Push (Recommended)
-                  </h3>
-                  <p className="font-body-sm text-on-surface-variant">
-                    Receive an instant payment prompt directly on your phone for Till #{orderData.tillNumber || '8995354'}. Enter your M-Pesa PIN to authorize.
-                  </p>
-
-                  <div className="relative group mb-1">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-on-surface">
+                        Pickup Location / Building / Estate <span className="text-red-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleDetectLocation}
+                        disabled={locatingGps}
+                        className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">my_location</span>
+                        <span>{locatingGps ? 'Pinning GPS...' : gpsCoords ? 'GPS Pinned ✓' : 'Use My Current Location'}</span>
+                      </button>
+                    </div>
                     <input
-                      className={`w-full bg-[#F1F5F9] rounded-lg px-4 py-4 font-body-md text-on-surface placeholder:text-outline transition-all duration-200 outline-none focus:bg-white focus:ring-1 focus:ring-primary ${stkError ? 'ring-1 ring-error bg-error-container/20' : ''
-                        }`}
-                      id="mpesa-phone"
-                      placeholder="e.g. 0712345678"
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => {
-                        setPhone(e.target.value);
-                        if (stkError) setStkError('');
-                      }}
+                      type="text"
+                      placeholder="e.g. Kilimani, Wood Avenue Apt / Hall 4 Hostel"
+                      value={pickupAddress}
+                      onChange={(e) => setPickupAddress(e.target.value)}
+                      className="w-full bg-surface-container px-4 py-3 rounded-xl text-sm text-on-surface border border-outline-variant/30 focus:border-primary focus:bg-surface outline-none transition-all"
                       required
                     />
-                    <label
-                      className="absolute left-4 -top-2 bg-surface-container-highest px-1 font-label-md text-[10px] text-primary opacity-0 group-focus-within:opacity-100 transition-opacity"
-                      htmlFor="mpesa-phone"
-                    >
-                      M-Pesa Phone Number
-                    </label>
                   </div>
 
-                  {stkError && (
-                    <p className="text-xs text-error font-medium px-1">{stkError}</p>
-                  )}
-
-                  {paymentStatusMsg && (
-                    <div className="bg-blue-50 text-blue-900 border border-blue-200 rounded-lg p-3 text-xs flex items-center gap-2">
-                      <span className="material-symbols-outlined text-base text-blue-600 animate-spin">sync</span>
-                      <span>{paymentStatusMsg}</span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs font-bold text-on-surface block mb-1.5">
+                        House / Room / Door Number
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Rm 302 / Door B4"
+                        value={houseNumber}
+                        onChange={(e) => setHouseNumber(e.target.value)}
+                        className="w-full bg-surface-container px-4 py-3 rounded-xl text-sm text-on-surface border border-outline-variant/30 focus:border-primary focus:bg-surface outline-none transition-all"
+                      />
                     </div>
-                  )}
 
-                  {stkSuccess && (
-                    <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg p-3 text-xs flex items-center gap-2">
-                      <span className="material-symbols-outlined text-base text-emerald-600">check_circle</span>
-                      <span>STK push prompt sent to <strong>{phone}</strong>. Please check your phone and enter your M-Pesa PIN.</span>
+                    <div>
+                      <label className="text-xs font-bold text-on-surface block mb-1.5">
+                        Pickup Instructions <span className="text-xs text-on-surface-variant font-normal">(Optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Call when at gate, basket is outside"
+                        value={pickupInstructions}
+                        onChange={(e) => setPickupInstructions(e.target.value)}
+                        className="w-full bg-surface-container px-4 py-3 rounded-xl text-sm text-on-surface border border-outline-variant/30 focus:border-primary focus:bg-surface outline-none transition-all"
+                      />
                     </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={stkLoading}
-                    className="w-full bg-primary text-on-primary font-semibold py-4 rounded-lg shadow-sm hover:bg-primary/90 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:pointer-events-none"
-                  >
-                    {stkLoading ? (
-                      <>
-                        <span className="material-symbols-outlined animate-spin text-sm">sync</span>
-                        Sending STK Push...
-                      </>
-                    ) : (
-                      <>
-                        <span className="material-symbols-outlined">send_to_mobile</span>
-                        Send STK Push Request
-                      </>
-                    )}
-                  </button>
-                </form>
-
-                <div className="h-px bg-surface-variant/50 w-full"></div>
-
-                {/* Option 2: Manual Till Payment */}
-                <div className="flex flex-col gap-3">
-                  <h3 className="font-label-md text-label-md text-outline uppercase tracking-wider">
-                    {orderData.hasChannelConfigured !== false ? 'Option 2: Manual Till Payment' : 'Manual Till Payment (Required)'}
-                  </h3>
-                  <div className="bg-surface-container-lowest rounded-lg p-4 flex justify-between items-center border border-surface-variant/50">
-                    <div className="flex flex-col">
-                      <span className="font-label-md text-label-md text-outline mb-1 uppercase">
-                        M-Pesa Buy Goods Till Number
-                      </span>
-                      <span className="font-headline-lg-mobile text-headline-lg-mobile text-primary font-bold tracking-widest">
-                        {orderData.tillNumber || '8995354'}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      aria-label="Copy Till Number"
-                      className={`w-10 h-10 rounded-full bg-surface-container hover:bg-surface-variant transition-all flex items-center justify-center ${copied ? 'scale-110 text-secondary' : 'text-primary'
-                        }`}
-                      onClick={() => copyToClipboard(orderData.tillNumber || '8995354')}
-                    >
-                      <span className="material-symbols-outlined text-lg">
-                        {copied ? 'check' : 'content_copy'}
-                      </span>
-                    </button>
                   </div>
-                  <p className="font-body-sm text-on-surface-variant">
-                    Pay KES <strong>{totalAmount.toLocaleString()}</strong> to Buy Goods Till <strong>{orderData.tillNumber || '8995354'}</strong>, then enter the M-Pesa transaction code below.
+                </div>
+
+                {step1Error && (
+                  <div className="bg-red-50 text-red-700 p-3.5 rounded-xl border border-red-200 text-xs font-semibold flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px]">error</span>
+                    <span>{step1Error}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="w-full bg-primary hover:bg-primary/90 text-on-primary font-bold text-sm py-4 rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer mt-4"
+                >
+                  <span>Proceed to Payment (Step 2 of 2)</span>
+                  <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* STEP 2: M-PESA PAYMENT (SPACIOUS & WELL ORGANIZED) */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {currentStep === 2 && (
+          <div className="space-y-6">
+            {/* Top Payment Header Card */}
+            <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white rounded-3xl p-6 md:p-8 shadow-md border border-slate-700/50">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div>
+                  <span className="px-3 py-1 bg-amber-400/20 text-amber-300 text-xs font-bold rounded-full border border-amber-400/30 inline-flex items-center gap-1.5 mb-2">
+                    <span className="material-symbols-outlined text-[14px]">lock</span>
+                    Secure Checkout • Step 2 of 2
+                  </span>
+                  <h2 className="text-2xl font-bold">M-Pesa Payment</h2>
+                  <p className="text-xs text-slate-300 mt-1">
+                    Paying to: <strong>{providerName}</strong> (Buy Goods Till: <span className="font-mono text-amber-300 font-bold">{tillNumber}</span>)
                   </p>
                 </div>
-              </div>
-            </section>
 
-            {/* Confirmation Bento */}
-            <section className="bg-surface-container-lowest rounded-xl p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
-              <div className="flex flex-col gap-2 mb-4">
-                <h3 className="font-headline-md text-body-lg text-on-surface font-semibold">
-                  Confirm Your Payment
-                </h3>
-                <p className="font-body-sm text-on-surface-variant">
-                  After paying, confirm using your M-Pesa code or paste the full SMS.
-                </p>
+                <div className="text-left md:text-right bg-white/10 px-5 py-3 rounded-2xl backdrop-blur-xs">
+                  <span className="text-xs text-slate-300 block">Total Due</span>
+                  <span className="text-2xl font-extrabold text-amber-300">KES {totalAmount.toLocaleString()}</span>
+                </div>
               </div>
 
-              {/* Mode Toggle */}
-              <div className="flex bg-surface-container rounded-lg p-1 gap-1 mb-4">
+              {/* Client Pickup Summary Brief */}
+              <div className="mt-5 pt-4 border-t border-slate-700/60 flex items-center justify-between text-xs text-slate-300">
+                <div className="flex items-center gap-2 truncate">
+                  <span className="material-symbols-outlined text-[16px] text-amber-400 shrink-0">location_on</span>
+                  <span className="truncate">Pickup for <strong>{clientName}</strong> at <strong>{pickupAddress}</strong></span>
+                </div>
                 <button
                   type="button"
-                  id="manual-mode-code"
-                  onClick={() => { setManualInputMode('code'); setConfirmError(''); }}
-                  className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${manualInputMode === 'code'
-                      ? 'bg-surface-container-lowest shadow-sm text-primary'
-                      : 'text-outline hover:text-on-surface'
-                    }`}
+                  onClick={() => setCurrentStep(1)}
+                  className="text-amber-300 hover:underline shrink-0 font-semibold cursor-pointer ml-3"
                 >
-                  <span className="material-symbols-outlined text-sm">pin</span>
-                  Enter Code
+                  Edit
                 </button>
+              </div>
+            </div>
+
+            {/* Option 1: STK Push Card (Spacious & Clean) */}
+            <div className="bg-surface-container-lowest rounded-3xl p-6 md:p-8 shadow-sm border border-surface-container/60">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200/80">
+                  <span className="material-symbols-outlined text-[22px]">phone_android</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-on-surface">Option 1: M-Pesa Express (STK Push)</h3>
+                  <p className="text-xs text-on-surface-variant">Enter phone number to receive an instant PIN prompt on your phone</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleStkPush} className="space-y-4 mt-4">
+                <div>
+                  <label className="text-xs font-bold text-on-surface block mb-1.5">
+                    M-Pesa Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="e.g. 0712345678"
+                    value={phone}
+                    onChange={(e) => {
+                      setPhone(e.target.value);
+                      if (stkError) setStkError('');
+                    }}
+                    className="w-full bg-surface-container px-4 py-3.5 rounded-xl text-sm font-semibold text-on-surface border border-outline-variant/30 focus:border-primary focus:bg-surface outline-none transition-all"
+                    required
+                  />
+                </div>
+
+                {stkError && (
+                  <div className="bg-red-50 text-red-700 p-3 rounded-xl border border-red-200 text-xs font-semibold">
+                    {stkError}
+                  </div>
+                )}
+
+                {paymentStatusMsg && (
+                  <div className="bg-blue-50 text-blue-900 border border-blue-200 rounded-xl p-3.5 text-xs flex items-center gap-2.5">
+                    <span className="material-symbols-outlined text-[20px] text-blue-600 animate-spin">sync</span>
+                    <span className="font-medium">{paymentStatusMsg}</span>
+                  </div>
+                )}
+
+                {stkSuccess && (
+                  <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl p-3.5 text-xs flex items-center gap-2.5">
+                    <span className="material-symbols-outlined text-[20px] text-emerald-600">check_circle</span>
+                    <span>Prompt sent to <strong>{phone}</strong>! Enter your PIN on your phone to complete.</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={stkLoading}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm py-4 rounded-2xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                >
+                  {stkLoading ? (
+                    <>
+                      <span className="material-symbols-outlined animate-spin text-[18px]">sync</span>
+                      <span>Sending M-Pesa Prompt...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-[18px]">send_to_mobile</span>
+                      <span>Send STK Prompt (KES {totalAmount.toLocaleString()})</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+
+            {/* Option 2: Manual Till Payment & Instant Confirmation */}
+            <div className="bg-surface-container-lowest rounded-3xl p-6 md:p-8 shadow-sm border border-surface-container/60">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                  <span className="material-symbols-outlined text-[22px]">payments</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-on-surface">Option 2: Pay Directly via Till Number</h3>
+                  <p className="text-xs text-on-surface-variant">Pay via Lipa na M-Pesa Buy Goods, then confirm with your code</p>
+                </div>
+              </div>
+
+              {/* Till Number Display Card */}
+              <div className="bg-surface-container rounded-2xl p-4 flex items-center justify-between border border-outline-variant/30 my-4">
+                <div>
+                  <span className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider block">
+                    Buy Goods Till Number
+                  </span>
+                  <span className="text-2xl font-extrabold text-primary font-mono tracking-wider">
+                    {tillNumber}
+                  </span>
+                </div>
                 <button
                   type="button"
-                  id="manual-mode-message"
-                  onClick={() => { setManualInputMode('message'); setConfirmError(''); }}
-                  className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${manualInputMode === 'message'
-                      ? 'bg-surface-container-lowest shadow-sm text-primary'
-                      : 'text-outline hover:text-on-surface'
-                    }`}
+                  onClick={() => copyToClipboard(tillNumber)}
+                  className="px-4 py-2 rounded-xl bg-surface hover:bg-surface-container-high text-xs font-bold text-primary transition-all flex items-center gap-1.5 border border-outline-variant/30 cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-sm">sms</span>
-                  Paste SMS
+                  <span className="material-symbols-outlined text-[16px]">
+                    {copied ? 'check' : 'content_copy'}
+                  </span>
+                  <span>{copied ? 'Copied!' : 'Copy Till'}</span>
                 </button>
               </div>
 
-              <form onSubmit={handleConfirmPayment} className="flex flex-col gap-4">
+              {/* Verification Form */}
+              <div className="mt-6 pt-4 border-t border-surface-container/60">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-bold text-on-surface">Confirm Payment Code:</span>
+                  <div className="flex gap-1 bg-surface-container p-1 rounded-xl text-xs">
+                    <button
+                      type="button"
+                      onClick={() => { setManualInputMode('code'); setConfirmError(''); }}
+                      className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${manualInputMode === 'code' ? 'bg-primary text-on-primary shadow-2xs' : 'text-on-surface-variant'}`}
+                    >
+                      Enter Code
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setManualInputMode('message'); setConfirmError(''); }}
+                      className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${manualInputMode === 'message' ? 'bg-primary text-on-primary shadow-2xs' : 'text-on-surface-variant'}`}
+                    >
+                      Paste SMS
+                    </button>
+                  </div>
+                </div>
 
-                {manualInputMode === 'code' ? (
-                  <div className="relative group">
+                <form onSubmit={handleConfirmPayment} className="space-y-3">
+                  {manualInputMode === 'code' ? (
                     <input
-                      className={`w-full bg-[#F1F5F9] rounded-lg px-4 py-4 font-body-md text-on-surface placeholder:text-outline transition-all duration-200 outline-none focus:bg-white focus:ring-1 focus:ring-primary uppercase font-mono tracking-widest ${confirmError ? 'ring-1 ring-error bg-error-container/20' : ''}`}
-                      id="transaction-code"
-                      placeholder="e.g. QKT1234567"
                       type="text"
+                      placeholder="e.g. QKT1234567"
                       value={transactionCode}
                       onChange={(e) => {
                         setTransactionCode(e.target.value.toUpperCase());
                         if (confirmError) setConfirmError('');
                       }}
                       maxLength={12}
-                      autoComplete="off"
+                      className="w-full bg-surface-container px-4 py-3.5 rounded-xl text-sm font-mono tracking-widest uppercase text-on-surface border border-outline-variant/30 focus:border-primary focus:bg-surface outline-none transition-all"
                     />
-                    <label
-                      className="absolute left-4 -top-2 bg-surface-container-lowest px-1 font-label-md text-[10px] text-primary opacity-0 group-focus-within:opacity-100 transition-opacity"
-                      htmlFor="transaction-code"
-                    >
-                      M-Pesa Transaction Code
-                    </label>
-                    <p className="text-xs text-outline mt-1 px-1">
-                      The 10-character code from your M-Pesa confirmation SMS (e.g. QKT1234567)
-                    </p>
-                  </div>
-                ) : (
-                  <div className="relative group">
+                  ) : (
                     <textarea
-                      className={`w-full bg-[#F1F5F9] rounded-lg px-4 py-3 font-body-sm text-on-surface placeholder:text-outline transition-all duration-200 outline-none focus:bg-white focus:ring-1 focus:ring-primary resize-none ${confirmError ? 'ring-1 ring-error bg-error-container/20' : ''}`}
-                      id="mpesa-message"
-                      rows={4}
-                      placeholder={"Paste your full M-Pesa SMS here...\n\nExample:\nQKT1234567 Confirmed.\nKsh1,200.00 sent to Laundry\non 15/8/26 at 2:30 PM"}
+                      rows={3}
+                      placeholder="Paste your complete M-Pesa SMS message here..."
                       value={mpesaMessage}
                       onChange={(e) => {
                         setMpesaMessage(e.target.value);
                         if (confirmError) setConfirmError('');
                       }}
+                      className="w-full bg-surface-container px-4 py-3 rounded-xl text-xs text-on-surface border border-outline-variant/30 focus:border-primary focus:bg-surface outline-none transition-all resize-none"
                     />
-                    <label
-                      className="absolute left-4 -top-2 bg-surface-container-lowest px-1 font-label-md text-[10px] text-primary opacity-0 group-focus-within:opacity-100 transition-opacity"
-                      htmlFor="mpesa-message"
-                    >
-                      Full M-Pesa Confirmation SMS
-                    </label>
-                    <p className="text-xs text-outline mt-1 px-1">
-                      Copy and paste the complete M-Pesa SMS message exactly as received — we'll extract your transaction code automatically.
-                    </p>
-                  </div>
-                )}
-
-                {confirmError && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
-                    <span className="font-semibold">Error: </span>{confirmError}
-                  </div>
-                )}
-
-                {confirmSuccess && extractedCode && (
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-700 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-base text-emerald-600">check_circle</span>
-                    <span>Payment confirmed! Code: <strong className="font-mono">{extractedCode}</strong>. Redirecting to your order...</span>
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  id="confirm-payment-btn"
-                  disabled={confirmLoading || confirmSuccess}
-                  className={`w-full font-label-md text-body-md py-4 rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 mt-2 ${confirmSuccess
-                    ? 'bg-secondary text-white'
-                    : 'bg-primary text-on-primary hover:bg-primary/90 hover:shadow-md active:scale-[0.98]'
-                    } disabled:opacity-80 disabled:pointer-events-none`}
-                >
-                  {confirmLoading ? (
-                    <>
-                      <span className="material-symbols-outlined animate-spin text-sm">sync</span>
-                      Verifying...
-                    </>
-                  ) : confirmSuccess ? (
-                    <>
-                      Payment Confirmed
-                      <span className="material-symbols-outlined text-sm">task_alt</span>
-                    </>
-                  ) : (
-                    <>
-                      {manualInputMode === 'message' ? 'Extract & Confirm' : 'Confirm Payment'}
-                      <span className="material-symbols-outlined text-sm">check_circle</span>
-                    </>
                   )}
-                </button>
-              </form>
-            </section>
 
+                  {confirmError && (
+                    <div className="bg-red-50 text-red-700 p-3 rounded-xl border border-red-200 text-xs font-semibold">
+                      {confirmError}
+                    </div>
+                  )}
 
-            {/* Trust Indicator */}
-            <div className="flex items-center justify-center gap-2 mt-4 opacity-70">
-              <span className="material-symbols-outlined text-outline text-sm">lock</span>
-              <span className="font-label-md text-label-md text-outline">Secure Payment Verification</span>
+                  {confirmSuccess && (
+                    <div className="bg-emerald-50 text-emerald-800 p-3 rounded-xl border border-emerald-200 text-xs font-semibold flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[18px] text-emerald-600">check_circle</span>
+                      <span>Payment verified! Code: <strong>{extractedCode || transactionCode}</strong>. Redirecting...</span>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={confirmLoading || confirmSuccess}
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm py-3.5 rounded-2xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                  >
+                    {confirmLoading ? (
+                      <>
+                        <span className="material-symbols-outlined animate-spin text-[18px]">sync</span>
+                        <span>Verifying Code...</span>
+                      </>
+                    ) : confirmSuccess ? (
+                      <>
+                        <span>Payment Verified ✓</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-[18px]">verified</span>
+                        <span>Confirm Payment &amp; Track Order</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            {/* Back to Step 1 Button */}
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => setCurrentStep(1)}
+                className="text-xs font-bold text-on-surface-variant hover:text-primary transition-colors flex items-center justify-center gap-1 mx-auto cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+                <span>Edit Contact or Pickup Location Details</span>
+              </button>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* M-Pesa STK Waiting & Countdown Modal */}
+        {stkLoading && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-surface-container-lowest rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl text-center space-y-5 border border-surface-container/80 animate-scaleUp">
+              <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto ring-8 ring-emerald-50">
+                <span className="material-symbols-outlined text-[36px] animate-pulse">smartphone</span>
+              </div>
+              <div>
+                <h3 className="font-headline-md text-xl font-bold text-on-surface">Waiting for M-Pesa PIN</h3>
+                <p className="text-xs sm:text-sm text-on-surface-variant mt-1">
+                  An STK push prompt has been sent to <strong>{phone}</strong> for <strong>KES {totalAmount.toLocaleString()}</strong>.
+                </p>
+              </div>
+              <div className="bg-surface-container rounded-2xl p-4 space-y-2 text-left">
+                <div className="flex justify-between items-center text-xs font-semibold text-on-surface-variant">
+                  <span>Prompt Expiration</span>
+                  <span className="font-mono font-bold text-primary text-sm">{stkCountdown}s remaining</span>
+                </div>
+                <div className="w-full bg-surface-container-highest h-2 rounded-full overflow-hidden">
+                  <div
+                    className="bg-emerald-500 h-full transition-all duration-1000 ease-linear"
+                    style={{ width: `${(stkCountdown / 60) * 100}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-on-surface-variant/80">Please unlock your phone and enter your 4-digit M-Pesa PIN to complete payment.</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleCancelStk}
+                  className="w-full py-3 rounded-xl border border-outline-variant/50 text-on-surface font-semibold text-xs hover:bg-surface-container transition-colors cursor-pointer"
+                >
+                  Cancel &amp; Pay via Till Number
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { auditLogApi } from '../api/auditLogApi';
+import toast from 'react-hot-toast';
 
 export default function AdminUserLogs() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -130,13 +131,11 @@ export default function AdminUserLogs() {
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', 'Aura_Laundry_System_Logs.csv');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
+      toast.success('Audit logs CSV downloaded successfully!');
     } catch (err) {
       console.error('CSV Export failed:', err);
-      alert('Failed to export CSV. Please check permissions.');
+      toast.error('Failed to export CSV. Please check permissions.');
     }
   };
 

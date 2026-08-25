@@ -1,12 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { serviceApi } from '../api/serviceApi';
+import toast from 'react-hot-toast';
+import ConfirmationModal from '../components/ui/ConfirmationModal';
 
-export default function cleanersServices({ isStandalone = true, onNavigateTab }) {
+export default function ProviderServices({ isStandalone = true, onNavigateTab }) {
   const navigate = useNavigate();
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  // Deletion Modal State
+  const [deleteTargetService, setDeleteTargetService] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Form State
   const [name, setName] = useState('');
@@ -50,6 +56,7 @@ export default function cleanersServices({ isStandalone = true, onNavigateTab })
         description
       });
       if (res.success) {
+        toast.success(`Service "${name}" created successfully!`);
         await fetchServices();
         setIsAddModalOpen(false);
         setName('');
@@ -57,10 +64,10 @@ export default function cleanersServices({ isStandalone = true, onNavigateTab })
         setDeliveryFee('200');
         setDescription('');
       } else {
-        alert(res.message || 'Failed to create service.');
+        toast.error(res.message || 'Failed to create service.');
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Error creating service.');
+      toast.error(err.response?.data?.message || 'Error creating service.');
     } finally {
       setSubmitting(false);
     }
@@ -70,22 +77,30 @@ export default function cleanersServices({ isStandalone = true, onNavigateTab })
     try {
       const res = await serviceApi.toggleServiceStatus(id, !currentStatus);
       if (res.success) {
+        toast.success(`Service ${!currentStatus ? 'activated' : 'disabled'}`);
         await fetchServices();
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to toggle service status.');
+      toast.error(err.response?.data?.message || 'Failed to toggle service status.');
     }
   };
 
-  const handleDeleteService = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this service from catalog?')) return;
+  const handleConfirmDelete = async () => {
+    if (!deleteTargetService) return;
     try {
-      const res = await serviceApi.deleteService(id);
+      setIsDeleting(true);
+      const res = await serviceApi.deleteService(deleteTargetService._id);
       if (res.success) {
+        toast.success(`Service "${deleteTargetService.name}" removed from catalog`);
+        setDeleteTargetService(null);
         await fetchServices();
+      } else {
+        toast.error(res.message || 'Failed to delete service.');
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to delete service.');
+      toast.error(err.response?.data?.message || 'Failed to delete service.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -131,8 +146,10 @@ export default function cleanersServices({ isStandalone = true, onNavigateTab })
                       {svc.isActive ? 'Active' : 'Disabled'}
                     </button>
                     <button
-                      onClick={() => handleDeleteService(svc._id)}
+                      onClick={() => setDeleteTargetService(svc)}
                       className="text-on-surface-variant hover:text-error transition-colors p-1 cursor-pointer"
+                      title="Delete service"
+                      aria-label={`Delete ${svc.name}`}
                     >
                       <span className="material-symbols-outlined text-[20px]">delete</span>
                     </button>
@@ -143,12 +160,27 @@ export default function cleanersServices({ isStandalone = true, onNavigateTab })
               </div>
               <div className="flex justify-between items-center pt-4 border-t border-surface-container/40">
                 <span className="font-headline-md text-primary">KES {svc.basePrice?.toLocaleString()}</span>
-                <span className="font-label-sm text-on-surface-variant">/ {svc.pricingType?.replace('_', ' ')}</span>
+                <span className="font-body-sm text-on-surface-variant">
+                  {svc.pricingType === 'per_kg' ? 'per KG' : 'flat item'}
+                </span>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Confirmation Modal for Service Deletion */}
+      <ConfirmationModal
+        isOpen={Boolean(deleteTargetService)}
+        onClose={() => setDeleteTargetService(null)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Service Offering"
+        itemName={deleteTargetService?.name}
+        warningMessage="Are you sure you want to permanently remove this service from your public catalog? Customers will no longer be able to select it."
+        confirmText="Delete Service"
+        type="danger"
+        isLoading={isDeleting}
+      />
 
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">

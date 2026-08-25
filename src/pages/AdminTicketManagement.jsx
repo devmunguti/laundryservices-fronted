@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ticketApi } from '../api/ticketApi';
+import toast from 'react-hot-toast';
 
 export default function AdminTicketManagement() {
   const [filterStatus, setFilterStatus] = useState('All');
@@ -96,16 +97,17 @@ export default function AdminTicketManagement() {
     try {
       const res = await ticketApi.updateTicketStatus(ticketId, { status });
       if (res.success) {
+        toast.success(`Ticket status updated to ${status}`);
         await fetchTicketsAndMetrics();
         if (activeTicket && activeTicket._id === ticketId) {
           const detailRes = await ticketApi.getTicketById(ticketId);
           if (detailRes.success) setActiveTicket(detailRes.data);
         }
       } else {
-        alert(res.message || 'Failed to update ticket status.');
+        toast.error(res.message || 'Failed to update ticket status.');
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Error updating status.');
+      toast.error(err.response?.data?.message || 'Error updating status.');
     }
   };
 
@@ -116,7 +118,7 @@ export default function AdminTicketManagement() {
         setActiveTicket(res.data);
       }
     } catch (err) {
-      alert('Failed to load ticket conversation.');
+      toast.error('Failed to load ticket conversation.');
     }
   };
 
@@ -128,15 +130,16 @@ export default function AdminTicketManagement() {
       setReplySubmitting(true);
       const res = await ticketApi.addTicketMessage(activeTicket._id, replyMessage.trim());
       if (res.success) {
+        toast.success('Reply message sent!');
         setReplyMessage('');
         const detailRes = await ticketApi.getTicketById(activeTicket._id);
         if (detailRes.success) setActiveTicket(detailRes.data);
         await fetchTicketsAndMetrics();
       } else {
-        alert(res.message || 'Failed to send message.');
+        toast.error(res.message || 'Failed to send message.');
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Error posting reply.');
+      toast.error(err.response?.data?.message || 'Error posting reply.');
     } finally {
       setReplySubmitting(false);
     }
@@ -154,16 +157,17 @@ export default function AdminTicketManagement() {
         initialMessage: newInitialMessage.trim()
       });
       if (res.success) {
+        toast.success('Support ticket created successfully!');
         setIsNewTicketModalOpen(false);
         setNewSubject('');
         setNewInitialMessage('');
         setNewPriority('Medium');
         await fetchTicketsAndMetrics();
       } else {
-        alert(res.message || 'Failed to create ticket.');
+        toast.error(res.message || 'Failed to create ticket.');
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Error creating ticket.');
+      toast.error(err.response?.data?.message || 'Error creating ticket.');
     } finally {
       setCreateSubmitting(false);
     }
@@ -342,7 +346,8 @@ export default function AdminTicketManagement() {
           </div>
         )}
 
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[750px]">
             <thead>
               <tr className="bg-surface-container-low/50">
@@ -420,6 +425,57 @@ export default function AdminTicketManagement() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Stacked Card View */}
+        <div className="md:hidden divide-y divide-surface-variant bg-surface-container-lowest">
+          {tickets.length === 0 && !loading ? (
+            <div className="p-8 text-center text-on-surface-variant font-body-md">
+              No support tickets found matching this criteria.
+            </div>
+          ) : (
+            tickets.map((t) => (
+              <div key={t._id} className="p-4 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="font-mono text-xs font-bold text-primary">{t.ticketId || t._id}</span>
+                    <h4 className="font-bold text-sm text-on-surface mt-0.5">{t.subject}</h4>
+                    <p className="text-xs text-on-surface-variant">{t.user?.fullName || 'User'} • {t.user?.phone || t.user?.email || 'No contact'}</p>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                    t.status === 'Resolved'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : t.status === 'In_Progress'
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {t.status.replace(/_/g, ' ')}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-on-surface-variant pt-1 border-t border-surface-variant/40">
+                  <span>Priority: <strong className="text-on-surface">{t.priority || 'Medium'}</strong></span>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-variant/40">
+                  <button
+                    onClick={() => handleOpenTicket(t._id)}
+                    className="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-semibold flex items-center gap-1 shadow-xs"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">forum</span> View & Reply
+                  </button>
+                  {t.status !== 'Resolved' && (
+                    <button
+                      onClick={() => handleUpdateStatus(t._id, 'Resolved')}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-semibold"
+                    >
+                      Resolve
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
         {/* Pagination */}

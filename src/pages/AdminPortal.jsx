@@ -4,6 +4,7 @@ import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../hooks/useAuth';
 import { systemSettingsApi } from '../api/systemSettingsApi';
 import { promotionApi } from '../api/promotionApi';
+import toast from 'react-hot-toast';
 
 import AdminOverview from './AdminOverview';
 import AdminProviderManagement from './AdminProviderManagement';
@@ -186,8 +187,10 @@ export default function AdminPortal() {
 
           <div className="flex items-center gap-stack-gap-md">
             <button
-              onClick={() => alert('System Notifications: 2 new cleaners registration applications pending approval.')}
+              onClick={() => toast('No unread system alerts')}
               className="relative p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors cursor-pointer"
+              title="System Alerts"
+              aria-label="System Alerts"
             >
               <span className="material-symbols-outlined">notifications</span>
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full ring-2 ring-surface-container-lowest" />

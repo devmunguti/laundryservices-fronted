@@ -4,6 +4,7 @@ import { orderApi } from '../api/orderApi';
 import { reviewApi } from '../api/reviewApi';
 import LiveNavigationMap from '../components/navigation/LiveNavigationMap';
 import { fetchRoadRoute, formatDistance, formatEta } from '../services/routingService';
+import toast from 'react-hot-toast';
 
 // ─── Order Status Timeline Definition ─────────────────────────────────────────
 // Matches the backend Order model enum exactly
@@ -66,6 +67,7 @@ function TransactionCodeDisplay({ code }) {
     if (code && navigator.clipboard) {
       navigator.clipboard.writeText(code);
       setCopied(true);
+      toast.success('M-Pesa code copied to clipboard!');
       setTimeout(() => setCopied(false), 2000);
     }
   };

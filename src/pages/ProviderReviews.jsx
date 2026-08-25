@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { reviewApi } from '../api/reviewApi';
+import toast from 'react-hot-toast';
 
-export default function cleanersReviews({ isStandalone = true }) {
+export default function ProviderReviews({ isStandalone = true }) {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [ratingFilter, setRatingFilter] = useState('all');
@@ -58,17 +59,18 @@ export default function cleanersReviews({ isStandalone = true }) {
       setSubmittingReply(true);
       const res = await reviewApi.replyToReview(reviewId, replyText.trim());
       if (res.success) {
+        toast.success('Response posted to client review!');
         setReviews(prev =>
           prev.map(rev => (rev._id === reviewId ? res.data : rev))
         );
         setReplyingId(null);
         setReplyText('');
       } else {
-        alert(res.message || 'Failed to post reply.');
+        toast.error(res.message || 'Failed to post reply.');
       }
     } catch (err) {
       console.error('Error posting review reply:', err);
-      alert(err.response?.data?.message || 'Error posting review reply.');
+      toast.error(err.response?.data?.message || 'Error posting review reply.');
     } finally {
       setSubmittingReply(false);
     }

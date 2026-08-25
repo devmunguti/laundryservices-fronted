@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
-export default function cleanersDashboard() {
+export default function ProviderDashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -214,7 +215,7 @@ export default function cleanersDashboard() {
                 </div>
 
                 <button
-                  onClick={() => alert('New Order modal initialized. Connect to backend order creation route.')}
+                  onClick={() => toast('Direct order creation modal available in Orders view')}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#003ec7] text-white hover:bg-[#003ec7]/90 transition-colors shadow-sm font-['Geist'] text-sm font-medium"
                 >
                   <span className="material-symbols-outlined text-[20px]">add</span>
@@ -592,7 +593,7 @@ export default function cleanersDashboard() {
             <div className="mt-6 flex gap-3">
               <button
                 onClick={() => {
-                  alert(`Order ${selectedOrder.id} status updated to Processing`);
+                  toast.success(`Order ${selectedOrder.id} status updated to Processing`);
                   setSelectedOrder(null);
                 }}
                 className="flex-1 py-2.5 bg-[#003ec7] text-white rounded-full font-['Geist'] text-sm font-medium hover:bg-[#003ec7]/90 transition-colors"

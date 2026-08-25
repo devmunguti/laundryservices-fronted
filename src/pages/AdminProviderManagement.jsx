@@ -513,8 +513,8 @@ export default function AdmincleanersManagement() {
           </div>
         )}
 
-        {/* Table Container */}
-        <div className="overflow-x-auto w-full">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto w-full">
           <table className="w-full text-left min-w-[800px]">
             <thead className="bg-surface-container-lowest">
               <tr>
@@ -723,6 +723,97 @@ export default function AdmincleanersManagement() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Stacked Card View */}
+        <div className="md:hidden divide-y divide-surface-variant bg-surface-container-lowest">
+          {cleanerss.length === 0 && !loading ? (
+            <div className="p-8 text-center text-on-surface-variant font-body-md">
+              No cleaner records found matching criteria.
+            </div>
+          ) : (
+            cleanerss.map((p) => (
+              <div key={p.id} className="p-4 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center overflow-hidden shrink-0">
+                      {p.image ? (
+                        <img className="w-full h-full object-cover" alt={p.name} src={p.image} />
+                      ) : (
+                        <span className="material-symbols-outlined text-primary">storefront</span>
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-on-surface">{p.name}</h4>
+                      <p className="text-xs text-on-surface-variant">{p.location} • {p.subLocation}</p>
+                    </div>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                    p.status === 'Active'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : p.status === 'Suspended'
+                        ? 'bg-rose-100 text-rose-800'
+                        : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {p.status}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-on-surface-variant pt-1 border-t border-surface-variant/40">
+                  <span>Owner: <strong className="text-on-surface">{p.owner || 'N/A'}</strong></span>
+                  <span>Orders: <strong className="text-on-surface">{p.totalOrders || 0}</strong></span>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-variant/40">
+                  {p.status === 'Pending' ? (
+                    <>
+                      <button
+                        onClick={() => handleApprove(p.id)}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => handleReject(p.id)}
+                        className="px-3 py-1.5 rounded-lg bg-rose-100 text-rose-700 text-xs font-semibold"
+                      >
+                        Reject
+                      </button>
+                    </>
+                  ) : p.status === 'Suspended' ? (
+                    <button
+                      onClick={() => handleRestore(p.id)}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-semibold"
+                    >
+                      Restore
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => handleEditClick(p)}
+                        className="px-3 py-1.5 rounded-lg bg-surface-container text-on-surface text-xs font-semibold"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleSuspend(p.id)}
+                        className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-900 text-xs font-semibold"
+                      >
+                        Suspend
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => handleDeleteCleaner(p)}
+                    className="p-1.5 rounded-lg bg-rose-50 text-rose-600 text-xs font-semibold"
+                    title="Delete Cleaner"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">delete</span>
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
         {/* Dynamic Pagination */}

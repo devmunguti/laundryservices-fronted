@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { paymentApi } from '../api/paymentApi';
+import toast from 'react-hot-toast';
+import ConfirmationModal from '../components/ui/ConfirmationModal';
 
 export default function PaymentChannels({ isStandalone = true }) {
   const navigate = useNavigate();
@@ -8,6 +10,8 @@ export default function PaymentChannels({ isStandalone = true }) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingChannel, setEditingChannel] = useState(null);
+  const [deleteTargetChannel, setDeleteTargetChannel] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,18 +53,25 @@ export default function PaymentChannels({ isStandalone = true }) {
       ...ch,
       isDefault: ch.id === id
     })));
+    toast.success('Default payout channel updated');
   };
 
-  const handleDelete = async (id) => {
+  const handleConfirmDelete = async () => {
+    if (!deleteTargetChannel) return;
     try {
-      const res = await paymentApi.deleteChannel(id);
+      setIsDeleting(true);
+      const res = await paymentApi.deleteChannel(deleteTargetChannel.id || deleteTargetChannel._id);
       if (res.success) {
+        toast.success(`Payment channel removed`);
+        setDeleteTargetChannel(null);
         await fetchChannels();
       } else {
-        alert(res.message || 'Failed to delete channel');
+        toast.error(res.message || 'Failed to delete channel');
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Error deleting payment channel');
+      toast.error(err.response?.data?.message || 'Error deleting payment channel');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -79,14 +90,15 @@ export default function PaymentChannels({ isStandalone = true }) {
       });
 
       if (res.success) {
+        toast.success('Payment channel added successfully!');
         await fetchChannels();
         setIsAddModalOpen(false);
         setNewChannel({ type: 'mpesa', title: '', subtitle: '', accountName: '', businessNo: '', accountNo: '' });
       } else {
-        alert(res.message || 'Failed to add payment channel');
+        toast.error(res.message || 'Failed to add payment channel');
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Error adding payment channel');
+      toast.error(err.response?.data?.message || 'Error adding payment channel');
     }
   };
 
@@ -179,9 +191,10 @@ export default function PaymentChannels({ isStandalone = true }) {
               )}
 
               <button
-                onClick={() => handleDelete(channel.id)}
+                onClick={() => setDeleteTargetChannel(channel)}
                 className="text-[#ba1a1a] hover:bg-red-50 p-2 rounded-full transition-colors cursor-pointer"
                 title="Delete channel"
+                aria-label={`Delete ${channel.title}`}
               >
                 <span className="material-symbols-outlined text-[18px]">delete</span>
               </button>
@@ -189,6 +202,19 @@ export default function PaymentChannels({ isStandalone = true }) {
           </div>
         ))}
       </div>
+
+      {/* Confirmation Modal for Channel Deletion */}
+      <ConfirmationModal
+        isOpen={Boolean(deleteTargetChannel)}
+        onClose={() => setDeleteTargetChannel(null)}
+        onConfirm={handleConfirmDelete}
+        title="Remove Payment Method"
+        itemName={deleteTargetChannel?.title}
+        warningMessage="Are you sure you want to remove this payment payout method from your account?"
+        confirmText="Remove Method"
+        type="danger"
+        isLoading={isDeleting}
+      />
 
       {/* Modal for Adding Payment Method */}
       {isAddModalOpen && (

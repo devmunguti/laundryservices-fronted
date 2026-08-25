@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { orderApi } from '../api/orderApi';
 import { providerApi } from '../api/providerApi';
 import { systemSettingsApi } from '../api/systemSettingsApi';
+import toast from 'react-hot-toast';
 
 export default function AdminOrderManagement() {
   const [activeTab, setActiveTab] = useState('All');
@@ -145,12 +146,13 @@ export default function AdminOrderManagement() {
     try {
       const res = await orderApi.updateOrderStatus(orderId, newStatus);
       if (res.success) {
+        toast.success(`Order status updated to ${newStatus.replace(/_/g, ' ')}`);
         await fetchOrdersAndMetrics();
       } else {
-        alert(res.message || 'Failed to update order status.');
+        toast.error(res.message || 'Failed to update order status.');
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Error updating order status.');
+      toast.error(err.response?.data?.message || 'Error updating order status.');
     }
   };
 
@@ -162,15 +164,15 @@ export default function AdminOrderManagement() {
       setAssignSubmitting(true);
       const res = await orderApi.assignProvider(assigningOrder.id, selectedProviderId);
       if (res.success) {
-        alert(res.message || 'Provider assigned successfully!');
+        toast.success(res.message || 'Provider assigned successfully!');
         setAssigningOrder(null);
         setSelectedProviderId('');
         await fetchOrdersAndMetrics();
       } else {
-        alert(res.message || 'Failed to assign provider.');
+        toast.error(res.message || 'Failed to assign provider.');
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Error assigning provider.');
+      toast.error(err.response?.data?.message || 'Error assigning provider.');
     } finally {
       setAssignSubmitting(false);
     }
@@ -186,6 +188,7 @@ export default function AdminOrderManagement() {
         pickupAddress: { street: 'Admin Created Order', city: 'Nairobi' }
       });
       if (res.success) {
+        toast.success('Manual order created successfully!');
         await fetchOrdersAndMetrics();
         setIsManualModalOpen(false);
         setNewCustomerName('');
@@ -193,7 +196,7 @@ export default function AdminOrderManagement() {
         setNewAmount('1500');
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Error creating manual order.');
+      toast.error(err.response?.data?.message || 'Error creating manual order.');
     }
   };
 

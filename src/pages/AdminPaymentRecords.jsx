@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { paymentApi } from '../api/paymentApi';
 import { useSettings } from '../context/SettingsContext';
+import toast from 'react-hot-toast';
+import ConfirmationModal from '../components/ui/ConfirmationModal';
 
 export default function AdminPaymentRecords() {
   const { settings } = useSettings();
@@ -21,6 +23,7 @@ export default function AdminPaymentRecords() {
   const [sendingInvoice, setSendingInvoice] = useState(false);
   const [invoiceAlertMsg, setInvoiceAlertMsg] = useState(null);
   const [bulkSendingInvoices, setBulkSendingInvoices] = useState(false);
+  const [isBulkInvoiceModalOpen, setIsBulkInvoiceModalOpen] = useState(false);
 
   // Pagination state
   const [page, setPage] = useState(1);
@@ -134,17 +137,18 @@ export default function AdminPaymentRecords() {
 
   // Send Bulk Payout Invoices
   const handleBulkSendInvoices = async () => {
-    if (!window.confirm('Send payout settlement invoices to all providers with settled payouts?')) return;
-
     try {
       setBulkSendingInvoices(true);
       const res = await paymentApi.sendBulkPayoutInvoices();
       if (res.success) {
+        toast.success(res.message || `Dispatched ${res.data?.sentCount || 0} payout invoices successfully!`);
         setInvoiceAlertMsg({ type: 'success', text: res.message || `Dispatched ${res.data?.sentCount || 0} payout invoices successfully!` });
+        setIsBulkInvoiceModalOpen(false);
         await fetchRecords();
         setTimeout(() => setInvoiceAlertMsg(null), 4000);
       }
     } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to send bulk invoices.');
       setInvoiceAlertMsg({ type: 'error', text: err.response?.data?.message || 'Failed to send bulk invoices.' });
     } finally {
       setBulkSendingInvoices(false);
@@ -158,17 +162,18 @@ export default function AdminPaymentRecords() {
       const res = await paymentApi.processBulkPayouts();
 
       if (res.success) {
+        toast.success('Bulk payouts processed successfully!');
         setPayoutSuccess(true);
         await Promise.all([fetchRecords(), fetchMetrics()]);
         setTimeout(() => {
           setPayoutSuccess(false);
         }, 2500);
       } else {
-        alert(res.message || 'Failed to process bulk payouts.');
+        toast.error(res.message || 'Failed to process bulk payouts.');
       }
     } catch (err) {
       console.error('Error processing bulk payouts:', err);
-      alert(err.response?.data?.message || 'Error processing payouts.');
+      toast.error(err.response?.data?.message || 'Error processing payouts.');
     } finally {
       setIsProcessingPayouts(false);
     }
@@ -179,14 +184,15 @@ export default function AdminPaymentRecords() {
     try {
       const res = await paymentApi.settlePayout(recordId);
       if (res.success) {
+        toast.success(`Payout for order ${orderId} settled successfully!`);
         setActiveMenuId(null);
         await Promise.all([fetchRecords(), fetchMetrics()]);
       } else {
-        alert(res.message || `Failed to settle payout for ${orderId}`);
+        toast.error(res.message || `Failed to settle payout for ${orderId}`);
       }
     } catch (err) {
       console.error('Error settling payout:', err);
-      alert(err.response?.data?.message || 'Failed to settle payout.');
+      toast.error(err.response?.data?.message || 'Failed to settle payout.');
     }
   };
 
@@ -208,9 +214,10 @@ export default function AdminPaymentRecords() {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
+      toast.success('Payment records CSV downloaded successfully!');
     } catch (err) {
       console.error('Export CSV failed:', err);
-      alert('Failed to export CSV report.');
+      toast.error('Failed to export CSV report.');
     }
   };
 
@@ -250,7 +257,7 @@ export default function AdminPaymentRecords() {
           </button>
 
           <button
-            onClick={handleBulkSendInvoices}
+            onClick={() => setIsBulkInvoiceModalOpen(true)}
             disabled={bulkSendingInvoices}
             className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-label-md py-2 px-4 rounded-lg transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
             title="Dispatch payout settlement receipts to all settled providers"
@@ -748,6 +755,18 @@ export default function AdminPaymentRecords() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal for Bulk Invoice Dispatch */}
+      <ConfirmationModal
+        isOpen={isBulkInvoiceModalOpen}
+        onClose={() => setIsBulkInvoiceModalOpen(false)}
+        onConfirm={handleBulkSendInvoices}
+        title="Dispatch Bulk Payout Invoices"
+        warningMessage="Send official payout settlement PDF invoices to all laundry partners who have received settled payouts?"
+        confirmText="Dispatch Invoices"
+        type="primary"
+        isLoading={bulkSendingInvoices}
+      />
     </div>
   );
 }
