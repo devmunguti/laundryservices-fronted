@@ -33,7 +33,7 @@ export default function AdminPortal() {
 
   const handleLogout = async () => {
     await logout();
-    navigate('/login');
+    navigate('/');
   };
 
   const fetchBadgeCounts = useCallback(async () => {

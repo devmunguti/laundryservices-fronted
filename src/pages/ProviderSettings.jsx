@@ -65,7 +65,7 @@ export default function ProviderSettings({ isStandalone = true }) {
         toast.success(res.data.message || 'Account deactivated successfully.');
         setIsDeactivateModalOpen(false);
         await logout();
-        navigate('/login');
+        navigate('/');
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to deactivate account.');
